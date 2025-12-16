@@ -79,13 +79,42 @@ class PasteBalloon extends Plugin {
       isPasting = false;
       // Use nextTick to ensure selection is updated
       void Promise.resolve().then(() => {
-        // Store the range of pasted content
+        // Get all elements that were inserted between start and current position
         const pasteEndPosition = this.editor.model.document.selection.getFirstPosition();
+
         if (this._pasteStartPosition && pasteEndPosition) {
-          this._pastedRange = this.editor.model.createRange(
-            this._pasteStartPosition,
-            pasteEndPosition,
-          );
+          // Find the minimal range that contains all pasted elements
+          const startElement = this._pasteStartPosition.parent;
+          const endElement = pasteEndPosition.parent;
+
+          // If they're in the same element, the range is within it
+          if (startElement === endElement) {
+            this._pastedRange = this.editor.model.createRange(
+              this._pasteStartPosition,
+              pasteEndPosition,
+            );
+          } else {
+            // If different elements, find common ancestor and expand range
+            const commonAncestor = startElement.getCommonAncestor(endElement);
+
+            // Find start element that's a child of common ancestor
+            let startNode = startElement;
+            while (startNode.parent !== commonAncestor) {
+              startNode = startNode.parent as any;
+            }
+
+            // Find end element that's a child of common ancestor
+            let endNode = endElement;
+            while (endNode.parent !== commonAncestor) {
+              endNode = endNode.parent as any;
+            }
+
+            // Create range from before first element to after last element
+            this._pastedRange = this.editor.model.createRange(
+              this.editor.model.createPositionBefore(startNode as any),
+              this.editor.model.createPositionAfter(endNode as any),
+            );
+          }
         }
         this._showBalloon();
       });
@@ -135,12 +164,17 @@ class PasteBalloon extends Plugin {
 
     // Replace the pasted content with cleaned version
     editor.model.change((writer) => {
-      writer.remove(this._pastedRange);
+      // Simply remove the pasted range and insert cleaned HTML at the start position
       const insertPosition = this._pastedRange.start;
+
+      // Remove the pasted content
+      writer.remove(this._pastedRange);
 
       // Use the editor's data processor to convert HTML to model
       const viewFragment = editor.data.processor.toView(cleanedHtml);
       const modelFragment = editor.data.toModel(viewFragment);
+
+      // Insert the cleaned content at the original position
       writer.insert(modelFragment, insertPosition);
     });
 
