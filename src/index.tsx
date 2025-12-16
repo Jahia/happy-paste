@@ -5,6 +5,7 @@ import {
   ContextualBalloon,
   clickOutsideHandler,
   BalloonPanelView,
+  type EditorConfig,
 } from "ckeditor5";
 
 class PasteBalloon extends Plugin {
@@ -318,17 +319,12 @@ class PasteBalloon extends Plugin {
 }
 
 export default function init() {
-  registry.add("callback", "customConfig", {
-    targets: ["jahiaApp-init:99.5"],
+  registry.add("callback", "happy-paste", {
+    targets: ["jahiaApp-init:999"],
     callback() {
-      // Our `customConfig` is based on the `minimal` configuration
-      const completeConfig = registry.get("ckeditor5-config", "complete") as any;
-      const customConfig = {
-        ...completeConfig,
-        // Register the PasteBalloon and Timestamp plugins
-        plugins: (completeConfig.plugins as any[]).concat([PasteBalloon]),
-      };
-      registry.addOrReplace("ckeditor5-config", "complete", customConfig);
+      for (const config of registry.find({ type: "ckeditor5-config" })) {
+        (config as EditorConfig)?.plugins?.push(PasteBalloon);
+      }
     },
   });
 }
