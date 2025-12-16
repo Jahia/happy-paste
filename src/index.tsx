@@ -164,11 +164,46 @@ class PasteBalloon extends Plugin {
 
     // Replace the pasted content with cleaned version
     editor.model.change((writer) => {
-      // Simply remove the pasted range and insert cleaned HTML at the start position
-      const insertPosition = this._pastedRange.start;
+      // Find the elements to remove - we need to remove entire paragraphs/elements, not just content
+      const elementsToRemove: any[] = [];
 
-      // Remove the pasted content
-      writer.remove(this._pastedRange);
+      // Check if the range spans entire elements or is within elements
+      const startElement = this._pastedRange.start.parent;
+      const endElement = this._pastedRange.end.parent;
+
+      if (startElement === endElement && startElement.is("element")) {
+        // If within a single element, check if we should remove the whole element
+        // This happens when paste creates a styled paragraph
+        const htmlAttrs =
+          startElement.getAttribute("htmlPAttributes") ||
+          startElement.getAttribute("htmlAttributes") ||
+          startElement.getAttribute("htmlLiAttributes") ||
+          startElement.getAttribute("htmlDivAttributes");
+
+        if (htmlAttrs) {
+          elementsToRemove.push(startElement);
+        }
+      }
+
+      // Collect all elements in the range
+      for (const item of this._pastedRange.getItems({ shallow: true })) {
+        if (item.is("element") && !elementsToRemove.includes(item)) {
+          elementsToRemove.push(item);
+        }
+      }
+
+      // Determine insertion point
+      const insertPosition =
+        elementsToRemove.length > 0
+          ? editor.model.createPositionBefore(elementsToRemove[0])
+          : this._pastedRange.start;
+
+      // Remove elements or range
+      if (elementsToRemove.length > 0) {
+        elementsToRemove.forEach((el) => writer.remove(el));
+      } else {
+        writer.remove(this._pastedRange);
+      }
 
       // Use the editor's data processor to convert HTML to model
       const viewFragment = editor.data.processor.toView(cleanedHtml);
@@ -190,18 +225,69 @@ class PasteBalloon extends Plugin {
     // Remove style attributes and unwrap divs/spans
     this._cleanNode(temp);
 
+    // Flatten nested block elements (e.g., p inside p)
+    this._flattenNestedBlocks(temp);
+
     return temp.innerHTML;
+  }
+
+  _flattenNestedBlocks(node: Node) {
+    const blockElements = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"];
+    const containerElements = ["li", "td", "th", "dd", "dt"]; // Elements that can legitimately contain block elements
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      const tagName = element.tagName.toLowerCase();
+
+      // Only unwrap if it's a block element that contains nested blocks
+      // But skip container elements that are allowed to have block children
+      if (blockElements.includes(tagName) && !containerElements.includes(tagName)) {
+        // Find any nested block elements
+        const nestedBlocks = Array.from(element.children).filter((child) =>
+          blockElements.includes(child.tagName.toLowerCase()),
+        );
+
+        // If there are nested blocks, unwrap this element
+        if (nestedBlocks.length > 0) {
+          const parent = element.parentNode;
+          if (parent) {
+            // Move all children before this element
+            while (element.firstChild) {
+              parent.insertBefore(element.firstChild, element);
+            }
+            // Remove the empty wrapper
+            parent.removeChild(element);
+            return; // Don't process children as they're already moved
+          }
+        }
+      }
+    }
+
+    // Process children
+    const children = Array.from(node.childNodes);
+    children.forEach((child) => this._flattenNestedBlocks(child));
   }
 
   _cleanNode(node: Node) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const element = node as HTMLElement;
-
-      // Remove style attribute
-      element.removeAttribute("style");
-
-      // Get tag name
       const tagName = element.tagName.toLowerCase();
+
+      // Process children FIRST before we potentially unwrap this element
+      const children = Array.from(node.childNodes);
+      children.forEach((child) => this._cleanNode(child));
+
+      // Remove style attribute and other inline styling attributes
+      element.removeAttribute("style");
+      element.removeAttribute("dir");
+      element.removeAttribute("id");
+
+      // Remove data attributes related to Google Docs
+      Array.from(element.attributes).forEach((attr) => {
+        if (attr.name.startsWith("data-")) {
+          element.removeAttribute(attr.name);
+        }
+      });
 
       // If it's a div or span, unwrap it (replace with its children)
       if (tagName === "div" || tagName === "span") {
@@ -213,14 +299,9 @@ class PasteBalloon extends Plugin {
           }
           // Remove the empty div/span
           parent.removeChild(element);
-          return; // Don't process children as they're already moved
         }
       }
     }
-
-    // Process children
-    const children = Array.from(node.childNodes);
-    children.forEach((child) => this._cleanNode(child));
   }
 
   _showBalloon() {
