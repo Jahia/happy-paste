@@ -23,16 +23,12 @@ export default defineConfig({
       ),
       filename: "index.js",
       remotes: {
-        ckeditor5: {
-          type: "global",
-          name: "ckeditor5",
-          entry: "global:appShell.remotes.ckeditor5",
-        },
+        ckeditor5: "window:appShell.remotes.ckeditor5",
       },
       exposes: {
         "./init": "./src/index.tsx",
       },
-      runtimePlugins: ["./federation-global-plugin.ts"],
+      runtimePlugins: ["./federation-window-plugin.ts"],
     }),
     {
       name: "iife-entrypoint",
