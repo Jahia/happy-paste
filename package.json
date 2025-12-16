@@ -6,20 +6,26 @@
   "files": [
     "javascript"
   ],
+  "scripts": {
+    "dev": "vite build --watch"
+  },
   "dependencies": {
-    "react": "^18"
+    "@jahia/ui-extender": "^1.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@babel/runtime": "^7.28.4",
+    "@module-federation/enhanced": "^0.21.6",
     "@module-federation/vite": "^1.9.4",
     "@types/node": "^25.0.2",
     "@types/react": "^19.2.7",
+    "ckeditor5": "^45.2.2",
     "oxfmt": "^0.18.0",
     "oxlint": "^1.33.0",
     "oxlint-tsgolint": "^0.9.1",
-    "vite": "^7"
-  },
-  "scripts": {
-    "dev": "vite build --watch"
+    "prop-types": "^15.8.1",
+    "vite": "^7.3.0"
   },
   "packageManager": "yarn@4.12.0"
 }

@@ -22,10 +22,17 @@ export default defineConfig({
         Object.keys(pkg.dependencies).map((dep) => [dep, { singleton: true }]),
       ),
       filename: "index.js",
-      remotes: {},
+      remotes: {
+        ckeditor5: {
+          type: "global",
+          name: "ckeditor5",
+          entry: "global:appShell.remotes.ckeditor5",
+        },
+      },
       exposes: {
         "./init": "./src/index.tsx",
       },
+      runtimePlugins: ["./federation-global-plugin.ts"],
     }),
     {
       name: "iife-entrypoint",
