@@ -1,6 +1,25 @@
 {
   "name": "happy-paste",
+  "version": "0.1.0-SNAPSHOT",
   "private": true,
   "type": "module",
+  "files": [
+    "javascript"
+  ],
+  "dependencies": {
+    "react": "^18"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "^1.9.4",
+    "@types/node": "^25.0.2",
+    "@types/react": "^19.2.7",
+    "oxfmt": "^0.18.0",
+    "oxlint": "^1.33.0",
+    "oxlint-tsgolint": "^0.9.1",
+    "vite": "^7"
+  },
+  "scripts": {
+    "dev": "vite build --watch"
+  },
   "packageManager": "yarn@4.12.0"
 }

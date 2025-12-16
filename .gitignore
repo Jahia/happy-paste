@@ -6,3 +6,11 @@
 !.yarn/versions
 
 node_modules
+
+# Build output
+dist
+javascript
+.__*
+
+# Misc
+.DS_Store
