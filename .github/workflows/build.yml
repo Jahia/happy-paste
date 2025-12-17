@@ -10,6 +10,10 @@ jobs:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v3
       - run: yarn && yarn build
+      - run: |
+          echo name=$(yarn node -p process.env.npm_package_name) >> $GITHUB_ENV
+          echo version=$(yarn node -p process.env.npm_package_version) >> $GITHUB_ENV
       - uses: actions/upload-artifact@v6
         with:
           path: dist/package.tgz
+          name: ${{ env.name }}-${{ env.version }}.tgz
