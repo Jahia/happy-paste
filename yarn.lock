@@ -1085,6 +1085,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@jahia/vite-federation-plugin@file:./vite-federation-plugin.tgz::locator=happy-paste%40workspace%3A.":
+  version: 0.1.0
+  resolution: "@jahia/vite-federation-plugin@file:./vite-federation-plugin.tgz#./vite-federation-plugin.tgz::hash=d5747a&locator=happy-paste%40workspace%3A."
+  dependencies:
+    "@module-federation/vite": "npm:^1.9.4"
+  peerDependencies:
+    vite: ^7.0.0
+  checksum: 10c0/4c99df4d2d8202ed3b533cdbbd9bdd6b7a1625dc7d166f6fdb9b527706068b260e61e0c8f1872d609e8567606314042dfe671df574ad56c16d797bfb97bf8cb3
+  languageName: node
+  linkType: hard
+
 "@jridgewell/sourcemap-codec@npm:^1.5.5":
   version: 1.5.5
   resolution: "@jridgewell/sourcemap-codec@npm:1.5.5"
@@ -2616,6 +2627,7 @@ __metadata:
   dependencies:
     "@babel/runtime": "npm:^7.28.4"
     "@jahia/ui-extender": "npm:^1.2.0"
+    "@jahia/vite-federation-plugin": ./vite-federation-plugin.tgz
     "@module-federation/enhanced": "npm:^0.21.6"
     "@module-federation/vite": "npm:^1.9.4"
     "@types/node": "npm:^25.0.2"

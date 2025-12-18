@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { defineConfig } from "vite";
-import { jahiaFederationPlugin } from "./jahia-federation-plugin.ts";
+import jahiaFederationPlugin from "@jahia/vite-federation-plugin";
 
 export default defineConfig({
   build: {
