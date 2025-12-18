@@ -1,52 +1,18 @@
-import { defineConfig } from "vite";
-import { federation } from "@module-federation/vite";
-import pkg from "./package.json";
 import { spawnSync } from "node:child_process";
+import { defineConfig } from "vite";
+import { jahiaFederationPlugin } from "./jahia-federation-plugin.ts";
 
 export default defineConfig({
-  esbuild: { jsx: "automatic" },
   build: {
-    rollupOptions: {
-      input: "./src/index.tsx",
-    },
     outDir: "javascript/apps",
-    assetsDir: "",
-    minify: false,
   },
 
-  base: "",
   plugins: [
-    federation({
-      name: pkg.name,
-      shared: Object.fromEntries(
-        Object.keys(pkg.dependencies).map((dep) => [dep, { singleton: true }]),
-      ),
-      filename: "index.js",
-      remotes: {
-        ckeditor5: "window:appShell.remotes.ckeditor5",
-      },
+    jahiaFederationPlugin({
       exposes: {
         "./init": "./src/index.tsx",
       },
-      runtimePlugins: ["./federation-window-plugin.ts"],
     }),
-    {
-      name: "iife-entrypoint",
-      buildEnd() {
-        this.emitFile({
-          type: "asset",
-          fileName: "remoteEntry.js",
-          source: `appShell.remotes[${JSON.stringify(pkg.name)}]={async init(...a){const m=await import("./index.js");await m.init(...a);Object.assign(this,m)}}`,
-        });
-        this.emitFile({
-          type: "asset",
-          fileName: "package.json",
-          source: JSON.stringify({
-            jahia: { remotes: { jahia: "javascript/apps/remoteEntry.js" } },
-          }),
-        });
-      },
-    },
     {
       name: "watch-mode",
       closeBundle(error) {
