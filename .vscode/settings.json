@@ -2,6 +2,5 @@
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.formatOnSave": true,
   "oxc.enable": true,
-  "oxc.fmt.experimental": true,
   "oxc.typeAware": true
 }
