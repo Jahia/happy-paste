@@ -8,7 +8,8 @@
   ],
   "scripts": {
     "build": "vite build && yarn pack --out dist/package.tgz",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "test": "vitest"
   },
   "dependencies": {
     "@jahia/ui-extender": "^1.2.0",
@@ -18,16 +19,18 @@
   "devDependencies": {
     "@babel/runtime": "^7.28.4",
     "@jahia/vite-federation-plugin": "^0.1.0",
-    "@module-federation/enhanced": "^0.21.6",
-    "@module-federation/vite": "^1.9.4",
     "@types/node": "^25.0.2",
     "@types/react": "^19.2.7",
+    "@vitest/coverage-v8": "4.0.16",
     "ckeditor5": "^45.2.2",
+    "hast-util-from-html-isomorphic": "^2.0.0",
+    "hast-util-to-html": "^9.0.5",
     "oxfmt": "^0.18.0",
     "oxlint": "^1.33.0",
     "oxlint-tsgolint": "^0.9.1",
     "prop-types": "^15.8.1",
-    "vite": "^7.3.0"
+    "vite": "^7.3.0",
+    "vitest": "^4.0.16"
   },
   "packageManager": "yarn@4.12.0"
 }
