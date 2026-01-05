@@ -29,6 +29,7 @@
     "oxlint": "^1.33.0",
     "oxlint-tsgolint": "^0.9.1",
     "prop-types": "^15.8.1",
+    "rehype-format": "^5.0.1",
     "vite": "^7.3.0",
     "vitest": "^4.0.16"
   },
