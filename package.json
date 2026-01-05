@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@babel/runtime": "^7.28.4",
-    "@jahia/vite-federation-plugin": "./vite-federation-plugin.tgz",
+    "@jahia/vite-federation-plugin": "^0.1.0",
     "@module-federation/enhanced": "^0.21.6",
     "@module-federation/vite": "^1.9.4",
     "@types/node": "^25.0.2",
