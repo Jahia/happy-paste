@@ -25,7 +25,28 @@ test("base 64 image extraction", () => {
       "files": [
         File ￼_0_: 72 bytes,
       ],
-      "html": "<img src="￼_0_">",
+      "html": "<p><img src="￼_0_"></p>",
+    }
+  `);
+});
+
+test("basic html cleanup", () => {
+  expect(
+    process(
+      `<div>
+        <a href="https://example.com"><strong>Click here</strong></a>
+        to visit
+        <span style="font-weight: 700;">our site</span>!
+      </div>`,
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "files": [],
+      "html": "<p>
+            <a href="https://example.com"><strong>Click here</strong></a>
+            to visit
+            <strong>our site</strong>!
+          </p>",
     }
   `);
 });

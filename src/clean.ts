@@ -2,77 +2,62 @@ import { fromHtmlIsomorphic } from "hast-util-from-html-isomorphic";
 import { toHtml } from "hast-util-to-html";
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
-interface Output {
+export interface Output {
   html: string;
   files: File[];
 }
 
-function visitRoot(root: Root, files: File[]): Root {
+interface Context {
+  files: File[];
+  depth: number;
+}
+
+export function process(input: string): Output {
+  const ast = fromHtmlIsomorphic(input);
+
+  const files: File[] = [];
+
+  const result = visitRoot(ast, { files, depth: 0 });
+
+  return {
+    html: toHtml(result, { characterReferences: { useNamedReferences: true } }),
+    files,
+  };
+}
+
+function visitRoot(root: Root, context: Context): Root {
   return {
     type: "root",
     children: root.children
-      .map((child) => visitNode(child, files))
-      .flat()
-      .filter((node) => node !== undefined)
-      .map((node) => {
-        if (node.type === "text") {
-          return {
-            type: "element",
-            tagName: "p",
-            properties: {},
-            children: [node],
-          };
-        }
-        return node;
-      }),
+      .flatMap((child) => visitNode(child, context))
+      .filter((node) => node !== undefined),
   };
 }
 
 function visitNode(
   node: RootContent,
-  files: File[],
+  context: Context,
 ): ElementContent[] | ElementContent | undefined {
-  if (node.type === "element") return visitElement(node, files);
+  if (node.type === "element") return visitElement(node, context);
   else if (node.type === "text" && node.value !== "") return node;
 }
 
-function visitElement(node: Element, files: File[]): ElementContent[] | ElementContent | undefined {
-  if (
-    node.tagName === "p" ||
-    node.tagName === "table" ||
-    node.tagName === "thead" ||
-    node.tagName === "tbody" ||
-    node.tagName === "tr" ||
-    node.tagName === "td" ||
-    node.tagName === "th" ||
-    node.tagName === "ul" ||
-    node.tagName === "ol" ||
-    node.tagName === "li"
-  ) {
-    return {
-      type: "element",
-      tagName: node.tagName,
-      properties: {},
-      children: node.children
-        .map((child) => visitNode(child, files))
-        .flat()
-        .filter((child) => child !== undefined),
-    };
-  }
+const structureNodes = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6"]);
+const inlineNodes = new Set(["strong", "em", "a", "img"]);
 
-  if (node.tagName === "h1" || node.tagName === "h2" || node.tagName === "h3") {
+function visitElement(
+  node: Element,
+  context: Context,
+): ElementContent[] | ElementContent | undefined {
+  const visitChild = (child: RootContent) =>
+    visitNode(child, { ...context, depth: context.depth + 1 });
+
+  if (structureNodes.has(node.tagName)) {
     return {
       type: "element",
       tagName: node.tagName,
       properties: {},
-      children: node.children
-        .map((child) => visitNode(child, files))
-        .flat()
-        .filter((child) => child !== undefined)
-        .flatMap((child) => {
-          if (child.type === "element" && child.tagName === "strong") return child.children;
-          return child;
-        }),
+      children: node.children.flatMap(visitChild).filter((child) => child !== undefined),
     };
   }
 
@@ -80,12 +65,11 @@ function visitElement(node: Element, files: File[]): ElementContent[] | ElementC
     const src = node.properties.src;
     if (typeof src === "string" && src.startsWith("data:")) {
       const type = src.substring(5, src.indexOf(";"));
-      const name = `￼_${files.length}_`;
+      const name = `￼_${context.files.length}_`;
       const binary = atob(src.slice(src.indexOf("base64,") + 7));
       const buffer = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
-      files.push(new File([buffer], name, { type }));
-
+      context.files.push(new File([buffer], name, { type }));
       return {
         type: "element",
         tagName: "img",
@@ -106,14 +90,12 @@ function visitElement(node: Element, files: File[]): ElementContent[] | ElementC
       properties: {
         href: node.properties.href || undefined,
       },
-      children: node.children
-        .map((child) => visitNode(child, files))
-        .flat()
-        .filter((child) => child !== undefined),
+      children: node.children.flatMap(visitChild).filter((child) => child !== undefined),
     };
   }
 
   if (
+    node.tagName === "span" &&
     typeof node.properties.style === "string" &&
     /font-weight\s?:\s?(bold|[789]\d\d)/.test(node.properties.style)
   ) {
@@ -121,28 +103,39 @@ function visitElement(node: Element, files: File[]): ElementContent[] | ElementC
       type: "element",
       tagName: "strong",
       properties: {},
-      children: node.children
-        .map((child) => visitNode(child, files))
-        .flat()
-        .filter((child) => child !== undefined),
+      children: node.children.flatMap(visitChild).filter((child) => child !== undefined),
     };
   }
 
-  return node.children
-    .map((child) => visitNode(child, files))
-    .flat()
+  if (inlineNodes.has(node.tagName)) {
+    return {
+      type: "element",
+      tagName: node.tagName,
+      properties: {},
+      children: node.children.flatMap(visitChild).filter((child) => child !== undefined),
+    };
+  }
+
+  const children = node.children
+    // We use visitNode directly because we stay at the same depth level
+    .flatMap((child) => visitNode(child, context))
     .filter((child) => child !== undefined);
-}
 
-export function process(input: string): Output {
-  const ast = fromHtmlIsomorphic(input);
+  // In case we are at the top level and some nodes are text nodes,
+  if (
+    context.depth === 0 &&
+    children.some(
+      (child) =>
+        child.type === "text" || (child.type === "element" && inlineNodes.has(child.tagName)),
+    )
+  ) {
+    return {
+      type: "element",
+      tagName: "p",
+      properties: {},
+      children,
+    };
+  }
 
-  const files: File[] = [];
-
-  const result = visitRoot(ast, files);
-
-  return {
-    html: toHtml(result, { characterReferences: { useNamedReferences: true } }),
-    files,
-  };
+  return children;
 }
