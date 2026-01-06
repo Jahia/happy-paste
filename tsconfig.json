@@ -1,8 +1,12 @@
 {
   "compilerOptions": {
     "allowImportingTsExtensions":true,
+    "lib": ["dom", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "noEmit": true,
     "strict": true,
     "types": ["vite/client"],
+    "verbatimModuleSyntax": true,
   }
 }

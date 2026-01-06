@@ -1,5 +1,5 @@
 import { registry } from "@jahia/ui-extender";
-import { Plugin, ViewDocumentClipboardInputEvent, type EditorConfig } from "ckeditor5";
+import { Plugin, type ViewDocumentClipboardInputEvent, type EditorConfig } from "ckeditor5";
 import { process } from "./clean.ts";
 
 class HappyPaste extends Plugin {
@@ -8,7 +8,6 @@ class HappyPaste extends Plugin {
       this.editor.editing.view.document,
       "clipboardInput",
       (evt, data) => {
-        console.log("clipboardInput", evt, data);
         const dataTransfer = data.dataTransfer;
         const html = dataTransfer.getData("text/html");
         const text = dataTransfer.getData("text/plain");

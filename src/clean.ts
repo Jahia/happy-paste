@@ -25,7 +25,7 @@ interface Context {
 }
 
 export function process(input: string): Output {
-  const ast = fromHtmlIsomorphic(input);
+  const ast = fromHtmlIsomorphic(input, { fragment: true });
 
   const context: Context = { files: [], depth: 0 };
 
