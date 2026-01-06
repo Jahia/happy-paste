@@ -67,10 +67,10 @@ suite("basic tests", () => {
   });
 
   test("inline elements", () => {
-    expect(process(`<em>Look at me</em><code>I'm a developer</code>`)).toMatchInlineSnapshot(`
+    expect(process(`<em>Look at me</em> <code>I'm a developer</code>`)).toMatchInlineSnapshot(`
       {
         "files": [],
-        "html": "<p><em>Look at me</em><code>I'm a developer</code></p>",
+        "html": "<em>Look at me</em> <code>I'm a developer</code>",
       }
     `);
   });
@@ -90,7 +90,7 @@ suite("basic tests", () => {
     ).toMatchInlineSnapshot(`
       {
         "files": [],
-        "html": "<p><strong>Bold and strong</strong></p>",
+        "html": "<strong>Bold and strong</strong>",
       }
     `);
   });

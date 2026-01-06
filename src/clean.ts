@@ -27,7 +27,15 @@ interface Context {
 export function process(input: string): Output {
   const ast = fromHtmlIsomorphic(input, { fragment: true });
 
-  const context: Context = { files: [], depth: 0 };
+  const context: Context = {
+    files: [],
+    depth: 0,
+    // If the root only contains phrasing content, we are in a phrasing context
+    phrasing: ast.children.every(
+      (child) =>
+        child.type === "text" || (child.type === "element" && inlineNodes.has(child.tagName)),
+    ),
+  };
 
   const result: Root = {
     type: "root",
@@ -260,7 +268,7 @@ function normalizeChildren(
 
 const structureNodes = new Set("p,h1,h2,h3,h4,h5,h6,pre,li,blockquote,table".split(","));
 const tableNodes = new Set("thead,tbody,tfoot,tr,th,td".split(","));
-const inlineNodes = new Set("strong,em,a,img,code,s".split(","));
+const inlineNodes = new Set("strong,em,a,img,code,s,em".split(","));
 const preNodes = new Set("pre,code".split(","));
 const implicitBoldNodes = new Set("h1,h2,h3,h4,h5,h6,th".split(","));
 /* Nodes that can contain another document themselves. */
