@@ -18,6 +18,8 @@ interface Context {
   pre?: boolean;
   /** Whether we are in a bold context (e.g. inside an <h1>) */
   bold?: boolean;
+  /** Whether we are in an italic context (e.g. inside an <em>) */
+  italic?: boolean;
   /** Whether we are in a strike context (e.g. inside an <s>) */
   strike?: boolean;
 }
@@ -52,6 +54,19 @@ function visitNode(
     if (/\S/.test(node.value)) return { type: "text", value: node.value.replace(/\s+/g, " ") };
     return { type: "text", value: " " }; // Collapse whitespace to single space
   }
+}
+
+function unnestSelfClosing(node: Element): Element {
+  // In case we are in a phrasing context, unwrap <img> and <br>
+  if (
+    node.children.length === 1 &&
+    node.children[0].type === "element" &&
+    (node.children[0].tagName === "img" || node.children[0].tagName === "br")
+  ) {
+    return node.children[0];
+  }
+
+  return node;
 }
 
 function splitOnNewLines(node: Element): Element[] {
@@ -248,6 +263,8 @@ const tableNodes = new Set("thead,tbody,tfoot,tr,th,td".split(","));
 const inlineNodes = new Set("strong,em,a,img,code,s".split(","));
 const preNodes = new Set("pre,code".split(","));
 const implicitBoldNodes = new Set("h1,h2,h3,h4,h5,h6,th".split(","));
+/* Nodes that can contain another document themselves. */
+const rootNodes = new Set("th,td,li".split(","));
 
 function visitElement(
   node: Element,
@@ -256,7 +273,9 @@ function visitElement(
   const childContext = {
     ...context,
     depth: context.depth + 1,
-    phrasing: context.phrasing || structureNodes.has(node.tagName) || inlineNodes.has(node.tagName),
+    phrasing:
+      (context.phrasing || structureNodes.has(node.tagName) || inlineNodes.has(node.tagName)) &&
+      !rootNodes.has(node.tagName),
     pre: context.pre || preNodes.has(node.tagName),
     bold: context.bold || implicitBoldNodes.has(node.tagName),
   };
@@ -316,7 +335,7 @@ function visitElement(
   }
 
   // Only keep child <br>
-  if (node.tagName === "br" && context.depth > 0) {
+  if (node.tagName === "br" && context.depth > 0 && context.phrasing) {
     return { type: "element", tagName: "br", properties: {}, children: [] };
   }
 
@@ -345,12 +364,12 @@ function visitElement(
   if (node.tagName === "a") {
     const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
     if (children.length > 0) {
-      return {
+      return unnestSelfClosing({
         type: "element",
         tagName: "a",
         properties: { href: node.properties.href },
         children,
-      };
+      });
     }
   }
 
@@ -368,7 +387,24 @@ function visitElement(
     if (context.bold) return children;
 
     if (children.length > 0)
-      return { type: "element", tagName: "strong", properties: {}, children };
+      return unnestSelfClosing({ type: "element", tagName: "strong", properties: {}, children });
+  }
+
+  if (
+    node.tagName === "em" ||
+    node.tagName === "i" ||
+    (node.tagName === "span" &&
+      typeof node.properties.style === "string" &&
+      /font-style\s*:\s*italic/.test(node.properties.style))
+  ) {
+    childContext.italic = true;
+    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+
+    // If already in italic context, skip this node to avoid nesting
+    if (context.italic) return children;
+
+    if (children.length > 0)
+      return unnestSelfClosing({ type: "element", tagName: "em", properties: {}, children });
   }
 
   if (
@@ -386,19 +422,25 @@ function visitElement(
     if (context.strike) return children;
 
     if (children.length > 0) {
-      return {
+      return unnestSelfClosing({
         type: "element",
         tagName: node.tagName === "del" ? "del" : "s",
         properties: {},
         children,
-      };
+      });
     }
   }
 
   if (inlineNodes.has(node.tagName)) {
     const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
-    if (children.length > 0)
-      return { type: "element", tagName: node.tagName, properties: {}, children };
+    if (children.length > 0) {
+      return unnestSelfClosing({
+        type: "element",
+        tagName: node.tagName,
+        properties: {},
+        children,
+      });
+    }
   }
 
   const children = normalizeChildren(
