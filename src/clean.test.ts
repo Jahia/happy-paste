@@ -1,27 +1,9 @@
 import { expect, test, suite } from "vitest";
 import { process } from "./clean.ts";
-import rehypeFormat from "rehype-format";
-import { fromHtmlIsomorphic } from "hast-util-from-html-isomorphic";
-import { toHtml } from "hast-util-to-html";
 
 expect.addSnapshotSerializer({
   test: (val) => val && val instanceof File,
   serialize: (file: File) => `File ${file.name}: ${file.size} bytes`,
-});
-
-expect.addSnapshotSerializer({
-  test: (val) => typeof val === "string" && val.startsWith("<"),
-  serialize: (html: string) => {
-    const ast = fromHtmlIsomorphic(html);
-    rehypeFormat({ indentInitial: false })(ast);
-    return (
-      '"' +
-      toHtml(ast, { characterReferences: { useNamedReferences: true } })
-        .replaceAll(/^\n<html>\n<head><\/head>\n<body>\n|<\/body>\n<\/html>\n$/g, "")
-        .trim() +
-      '"'
-    );
-  },
 });
 
 suite("basic tests", () => {
@@ -44,9 +26,7 @@ suite("basic tests", () => {
         "files": [
           File ￼_0_: 72 bytes,
         ],
-        "html": "<p>
-          <img src="￼_0_">
-        </p>",
+        "html": "<p><img src="￼_0_"></p>",
       }
     `);
   });
@@ -55,8 +35,7 @@ suite("basic tests", () => {
     expect(
       process(
         `<div>
-          <a href="https://example.com"><strong>Click here</strong></a>
-          to visit
+          <a href="https://example.com"><strong> Click here </strong></a>to visit
           <span style="font-weight: 700;">our site</span>!
         </div>`,
       ),
@@ -78,7 +57,7 @@ suite("basic tests", () => {
   });
 
   test("empty elements", () => {
-    expect(process(`<div><p>Hello</p><p></p><a href="http://example.com"></a></div>`))
+    expect(process(`<div><p>Hello</p><p> </p><a href="http://example.com"> </a></div>`))
       .toMatchInlineSnapshot(`
       {
         "files": [],
@@ -124,10 +103,20 @@ suite("basic tests", () => {
     ).toMatchInlineSnapshot(`
       {
         "files": [],
-        "html": "<p>Hello<br>World</p>
-        <p>Foo</p>
-        <p>Bar</p>
-        <p>Trim new lines</p>",
+        "html": "<p>Hello<br>World</p><p>Foo</p><p>Bar</p><p>Trim new lines</p>",
+      }
+    `);
+  });
+
+  test("fix whitespace", () => {
+    expect(
+      process(
+        `<p><a>Click </a>me</p><blockquote><p><strong> </strong></p></blockquote><p> Foo </p>`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "files": [],
+        "html": "<p><a>Click</a> me</p><p>Foo</p>",
       }
     `);
   });
@@ -142,35 +131,7 @@ suite("google docs", () => {
     ).toMatchInlineSnapshot(`
       {
         "files": [],
-        "html": "<h1>How to create an Island Architecture Website in Jahia?</h1>
-        <ul>
-          <li>
-            <p>waz is das?</p>
-            <ul>
-              <li>
-                <p>why it matters: performance (0 JS by default), ease of development</p>
-              </li>
-            </ul>
-          </li>
-          <li>
-            <p>showcase JSM ecosystem (create-module, vite-plugin, engine...)</p>
-          </li>
-          <li>
-            <p>SSR -> Hydration</p>
-          </li>
-        </ul>
-        <p>Ask for cool schemas (Jahia-style)</p>
-        <hr>
-        <p>Partie SEO</p>
-        <p>Keywords (research on Google USA) :</p>
-        <ul>
-          <li>
-            <p><strong>Principal keyword island architecture (210) informal intention</strong></p>
-          </li>
-          <li>
-            <p><s>Partial hydration (20)</s></p>
-          </li>
-        </ul>",
+        "html": "<h1>How to create an Island Architecture Website in Jahia?</h1><ul><li><p>waz is das?</p><ul><li><p>why it matters: performance (0 JS by default), ease of development</p></li></ul></li><li><p>showcase JSM ecosystem (create-module, vite-plugin, engine...)</p></li><li><p>SSR -> Hydration</p></li></ul><p>Ask for cool schemas (Jahia-style)</p><hr><p>Partie SEO</p><p>Keywords (research on Google USA) :</p><ul><li><p><strong>Principal keyword island architecture (210) informal intention</strong></p></li><li><p><s>Partial hydration (20)</s></p></li></ul>",
       }
     `);
   });
@@ -186,139 +147,7 @@ suite("google docs", () => {
           File ￼_0_: 72 bytes,
           File ￼_1_: 72 bytes,
         ],
-        "html": "<p><strong>Productivity Pack</strong></p>
-        <p>The <a href="https://ckeditor.com/productivity-pack/">Productivity Pack</a> is a bundle of Premium plugins designed to enhance document editing and accelerate content creation for you and your team, available for no extra cost with a CKEditor base subscription.</p>
-        <h1>Productivity Pack Minutes Saved by the User</h1>
-        <p>Fictional Data</p>
-        <table>
-          <tbody>
-            <tr>
-              <td>
-                <p><strong>Productivity Pack Features</strong></p>
-              </td>
-              <td>
-                <p><strong>Minutes Saved</strong></p>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <p><strong>Document Outline</strong></p>
-              </td>
-              <td>
-                <p>1237</p>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <p><strong>Table of Contents</strong></p>
-              </td>
-              <td>
-                <p>1237</p>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <p><strong>Format Painter</strong></p>
-              </td>
-              <td>
-                <p>1162</p>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <p><strong>Templates</strong></p>
-              </td>
-              <td>
-                <p>1225</p>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <p><strong>Slash Commands</strong></p>
-              </td>
-              <td>
-                <p>1247</p>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <p><strong>Paste from Office Enhanced</strong></p>
-              </td>
-              <td>
-                <p>1350</p>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <p><strong>Total</strong></p>
-              </td>
-              <td>
-                <p><strong>7458</strong></p>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <h1>Discover the purpose-built collaboration tools</h1>
-        <p>Add a <strong>GDocs-like experience</strong>to your app with Premium collaboration tools:</p>
-        <ul>
-          <li>
-            <p>Real-time Collaboration</p>
-          </li>
-          <li>
-            <p>Track Changes</p>
-          </li>
-          <li>
-            <p>Asynchronous Collaboration</p>
-          </li>
-          <li>
-            <p>Revision History</p>
-          </li>
-          <li>
-            <p>Comments outside editor</p>
-          </li>
-          <li>
-            <p>REST API and Webhooks</p>
-          </li>
-        </ul>
-        <p>
-          <img src="￼_0_" width="192" height="144">
-        </p>
-        <h1>What clients say about CKEditor</h1>
-        <p>Collaboration is built into our application and we don’t need to use any other external tools, like Google Docs.<br>Rick Nash, Spotlight</p>
-        <h1>Create <a href="https://www.jahia.com/product/content-management-system">Websites</a> &amp; <a href="https://www.jahia.com/solutions/web-portals">Portals</a> using Jahia Digital Experience Platform</h1>
-        <ul>
-          <li>
-            <p>Highest rated experience platform by both Marketers and IT teams</p>
-          </li>
-          <li>
-            <p>Headless and traditional CMS, fully extensible with 1000+ connectors</p>
-          </li>
-          <li>
-            <p>Integrated CDP for world class personalization, optimization and A/B testing</p>
-          </li>
-        </ul>
-        <p>
-          <img src="￼_1_" width="602" height="545">
-        </p>
-        <h2>My main title</h2>
-        <p>A fancy introduction to replace lorem ipsum with fake text.</p>
-        <h3>My awesome list</h3>
-        <ul>
-          <li>
-            <p>Support for <strong>composition</strong>, mixins, inheritance to ease modeling, and re-utilization</p>
-          </li>
-          <li>
-            <p>Tons of options for each property: mandatory, read-only, shared by all languages</p>
-          </li>
-          <li>
-            <p>Plenty of selectors available: text fields, areas, rich text, date, dropdowns, tags, colors, trees, ..</p>
-          </li>
-          <li>
-            <p>Client-side and server-side validation</p>
-          </li>
-        </ul>
-        <h3>Conclusion</h3>
-        <p>Like my<a href="https://www.youtube.com/watch?v=xvFZjo5PgG0">link</a>, please. Love.</p>",
+        "html": "<p><strong>Productivity Pack</strong></p><p>The <a href="https://ckeditor.com/productivity-pack/">Productivity Pack</a> is a bundle of Premium plugins designed to enhance document editing and accelerate content creation for you and your team, available for no extra cost with a CKEditor base subscription.</p><h1>Productivity Pack Minutes Saved by the User</h1><p>Fictional Data</p><table><tbody><tr><td><p><strong>Productivity Pack Features</strong></p></td><td><p><strong>Minutes Saved</strong></p></td></tr><tr><td><p><strong>Document Outline</strong></p></td><td><p>1237</p></td></tr><tr><td><p><strong>Table of Contents</strong></p></td><td><p>1237</p></td></tr><tr><td><p><strong>Format Painter</strong></p></td><td><p>1162</p></td></tr><tr><td><p><strong>Templates</strong></p></td><td><p>1225</p></td></tr><tr><td><p><strong>Slash Commands</strong></p></td><td><p>1247</p></td></tr><tr><td><p><strong>Paste from Office Enhanced</strong></p></td><td><p>1350</p></td></tr><tr><td><p><strong>Total</strong></p></td><td><p><strong>7458</strong></p></td></tr></tbody></table><h1>Discover the purpose-built collaboration tools</h1><p>Add a <strong>GDocs-like experience</strong> to your app with Premium collaboration tools:</p><ul><li><p>Real-time Collaboration</p></li><li><p>Track Changes</p></li><li><p>Asynchronous Collaboration</p></li><li><p>Revision History</p></li><li><p>Comments outside editor</p></li><li><p>REST API and Webhooks</p></li></ul><p><img src="￼_0_" width="192" height="144"></p><h1>What clients say about CKEditor</h1><p>Collaboration is built into our application and we don’t need to use any other external tools, like Google Docs.<br>Rick Nash, Spotlight</p><h1>Create <a href="https://www.jahia.com/product/content-management-system">Websites</a> &amp; <a href="https://www.jahia.com/solutions/web-portals">Portals</a> using Jahia Digital Experience Platform</h1><ul><li><p>Highest rated experience platform by both Marketers and IT teams</p></li><li><p>Headless and traditional CMS, fully extensible with 1000+ connectors</p></li><li><p>Integrated CDP for world class personalization, optimization and A/B testing</p></li></ul><p><img src="￼_1_" width="602" height="545"></p><h2>My main title</h2><p>A fancy introduction to replace lorem ipsum with fake text.</p><h3>My awesome list</h3><ul><li><p>Support for <strong>composition</strong>, mixins, inheritance to ease modeling, and re-utilization</p></li><li><p>Tons of options for each property: mandatory, read-only, shared by all languages</p></li><li><p>Plenty of selectors available: text fields, areas, rich text, date, dropdowns, tags, colors, trees, ..</p></li><li><p>Client-side and server-side validation</p></li></ul><h3>Conclusion</h3><p>Like my <a href="https://www.youtube.com/watch?v=xvFZjo5PgG0">link</a>, please. Love.</p>",
       }
     `);
   });

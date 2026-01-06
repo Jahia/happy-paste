@@ -2,10 +2,10 @@
   "name": "happy-paste",
   "version": "0.1.0-SNAPSHOT",
   "private": true,
-  "type": "module",
   "files": [
     "javascript"
   ],
+  "type": "module",
   "scripts": {
     "build": "vite build && yarn pack --out dist/package.tgz",
     "dev": "vite build --watch",
@@ -19,17 +19,16 @@
   "devDependencies": {
     "@babel/runtime": "^7.28.4",
     "@jahia/vite-federation-plugin": "^0.1.0",
-    "@types/node": "^25.0.2",
+    "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",
     "@vitest/coverage-v8": "4.0.16",
     "ckeditor5": "^45.2.2",
     "hast-util-from-html-isomorphic": "^2.0.0",
     "hast-util-to-html": "^9.0.5",
-    "oxfmt": "^0.18.0",
-    "oxlint": "^1.33.0",
-    "oxlint-tsgolint": "^0.9.1",
+    "oxfmt": "^0.23.0",
+    "oxlint": "^1.37.0",
+    "oxlint-tsgolint": "^0.10.1",
     "prop-types": "^15.8.1",
-    "rehype-format": "^5.0.1",
     "vite": "^7.3.0",
     "vitest": "^4.0.16"
   },
