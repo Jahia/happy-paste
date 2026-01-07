@@ -7,6 +7,54 @@ export interface Output {
   files: File[];
 }
 
+let i = 0;
+const Attr = {
+  /** Node that is part of the document structure (e.g. <p>) */
+  STRUCTURE: 1 << i++,
+  /** Node that is part of a table (e.g. <tr>) */
+  TABLE: 1 << i++,
+  /** Node that is inline (e.g. <strong>) */
+  INLINE: 1 << i++,
+  /** Node that implies preformatted text (e.g. <pre>) */
+  PRE: 1 << i++,
+  /** Node that implies bold formatting (e.g. <h1>) */
+  IMPLICIT_BOLD: 1 << i++,
+  /** Node that can contain another document themselves (e.g. <li>) */
+  ROOT: 1 << i++,
+};
+
+/** All known nodes with their attributes */
+const KnownNodes: Record<string, number> = {
+  a: Attr.INLINE,
+  blockquote: Attr.STRUCTURE,
+  code: Attr.INLINE | Attr.PRE,
+  del: Attr.INLINE,
+  em: Attr.INLINE,
+  h1: Attr.STRUCTURE | Attr.IMPLICIT_BOLD,
+  h2: Attr.STRUCTURE | Attr.IMPLICIT_BOLD,
+  h3: Attr.STRUCTURE | Attr.IMPLICIT_BOLD,
+  h4: Attr.STRUCTURE | Attr.IMPLICIT_BOLD,
+  h5: Attr.STRUCTURE | Attr.IMPLICIT_BOLD,
+  h6: Attr.STRUCTURE | Attr.IMPLICIT_BOLD,
+  img: Attr.INLINE,
+  li: Attr.STRUCTURE | Attr.ROOT,
+  p: Attr.STRUCTURE,
+  pre: Attr.STRUCTURE | Attr.PRE,
+  s: Attr.INLINE,
+  strong: Attr.INLINE,
+  table: Attr.STRUCTURE,
+  tbody: Attr.TABLE,
+  td: Attr.TABLE | Attr.ROOT,
+  tfoot: Attr.TABLE,
+  th: Attr.TABLE | Attr.IMPLICIT_BOLD | Attr.ROOT,
+  thead: Attr.TABLE,
+  tr: Attr.TABLE,
+};
+
+/** @example checkAttr(element, Attr.INLINE) */
+const checkAttr = (element: Element, attrs: number) =>
+  KnownNodes[element.tagName] !== undefined && (KnownNodes[element.tagName] & attrs) !== 0;
+
 interface Context {
   /** Files extracted from the input */
   files: File[];
@@ -24,6 +72,7 @@ interface Context {
   strike?: boolean;
 }
 
+/** Takes an HTML string and process it to extract images and the structure of the document. */
 export function process(input: string): Output {
   const ast = fromHtmlIsomorphic(input, { fragment: true });
 
@@ -33,7 +82,7 @@ export function process(input: string): Output {
     // If the root only contains phrasing content, we are in a phrasing context
     phrasing: ast.children.every(
       (child) =>
-        child.type === "text" || (child.type === "element" && inlineNodes.has(child.tagName)),
+        child.type === "text" || (child.type === "element" && checkAttr(child, Attr.INLINE)),
     ),
   };
 
@@ -59,13 +108,15 @@ function visitNode(
     return visitElement(node, context);
   } else if (node.type === "text") {
     if (context.pre) return node;
+
+    // Collapse whitespace to single space
     if (/\S/.test(node.value)) return { type: "text", value: node.value.replace(/\s+/g, " ") };
-    return { type: "text", value: " " }; // Collapse whitespace to single space
+    return { type: "text", value: " " };
   }
 }
 
+/** Will transform <em><img /></em> into <img />  */
 function unnestSelfClosing(node: Element): Element {
-  // In case we are in a phrasing context, unwrap <img> and <br>
   if (
     node.children.length === 1 &&
     node.children[0].type === "element" &&
@@ -77,6 +128,7 @@ function unnestSelfClosing(node: Element): Element {
   return node;
 }
 
+/** Split an element on double <br />, drop <br /> at start and end. */
 function splitOnNewLines(node: Element): Element[] {
   return (
     node.children
@@ -136,6 +188,11 @@ function splitOnNewLines(node: Element): Element[] {
   );
 }
 
+/**
+ * Find the first nested node that matches the predicate.
+ *
+ * This function only explores the first child recursively.
+ */
 function findFirstNestedNode<T extends ElementContent>(
   children: ElementContent[],
   predicate: (node: ElementContent) => node is T,
@@ -145,6 +202,11 @@ function findFirstNestedNode<T extends ElementContent>(
   if (first && first.type === "element") return findFirstNestedNode(first.children, predicate);
 }
 
+/**
+ * Find the last nested node that matches the predicate.
+ *
+ * This function only explores the last child recursively.
+ */
 function findLastNestedNode<T extends ElementContent>(
   children: ElementContent[],
   predicate: (node: ElementContent) => node is T,
@@ -154,14 +216,21 @@ function findLastNestedNode<T extends ElementContent>(
   if (last && last.type === "element") return findLastNestedNode(last.children, predicate);
 }
 
+/** Return whether the node consists only of whitespace. */
 function onlyWhitespace(node: ElementContent): boolean {
   if (node.type === "element")
     return node.tagName !== "img" && node.tagName !== "hr" && node.children.every(onlyWhitespace);
-  if (node.type === "text") return /^\s*$/.test(node.value);
+  if (node.type === "text") return !/\S/.test(node.value);
   return true;
 }
 
-/** Remove trailing whitespace, merge text nodes, migrate misplaced whitespace. */
+/**
+ * Remove trailing whitespace, merge text nodes, migrate misplaced whitespace.
+ *
+ * @example
+ *   normalizeChildren([' ', <a>Hello </a>, 'World '])
+ *   // => [<a>Hello</a>, ' World']
+ */
 function normalizeChildren(
   children: Array<ElementContent | undefined>,
   context: Context,
@@ -222,11 +291,10 @@ function normalizeChildren(
   // In case we have a single text node, we will let the parent finish the trimming
   // to ensure we don't remove a meaningful space. (e.g. <strong>foo </strong>bar)
   //                                                                ^
-  if (normalized.length === 1 && normalized[0].type === "text" && context.phrasing) {
+  if (normalized.length === 1 && normalized[0].type === "text" && context.phrasing)
     return normalized;
-  }
 
-  // Remove trailing whitespace
+  // Remove leading whitespace
   const first = normalized[0];
   if (first && first.type === "text") {
     const value = first.value.trimStart();
@@ -234,6 +302,7 @@ function normalizeChildren(
     else normalized.shift();
   }
 
+  // Remove trailing whitespace
   const last = normalized.at(-1);
   if (last && last.type === "text") {
     const value = last.value.trimEnd();
@@ -241,7 +310,8 @@ function normalizeChildren(
     else normalized.pop();
   }
 
-  // In non phrasing context, remove whitespace-only children and trim first/last text nodes
+  // In non phrasing context, remove whitespace-only children and trim first and last text nodes
+  // e.g. [<p> </p>, <p> Hello </p>] => [<p>Hello</p>]
   if (!context.phrasing) {
     return normalized
       .filter((child) => !onlyWhitespace(child))
@@ -266,14 +336,7 @@ function normalizeChildren(
   return normalized;
 }
 
-const structureNodes = new Set("p,h1,h2,h3,h4,h5,h6,pre,li,blockquote,table".split(","));
-const tableNodes = new Set("thead,tbody,tfoot,tr,th,td".split(","));
-const inlineNodes = new Set("strong,em,a,img,code,s,em".split(","));
-const preNodes = new Set("pre,code".split(","));
-const implicitBoldNodes = new Set("h1,h2,h3,h4,h5,h6,th".split(","));
-/* Nodes that can contain another document themselves. */
-const rootNodes = new Set("th,td,li".split(","));
-
+/** Visit an element node, process it and its its children (with the help of visitNode). */
 function visitElement(
   node: Element,
   context: Context,
@@ -282,33 +345,40 @@ function visitElement(
     ...context,
     depth: context.depth + 1,
     phrasing:
-      (context.phrasing || structureNodes.has(node.tagName) || inlineNodes.has(node.tagName)) &&
-      !rootNodes.has(node.tagName),
-    pre: context.pre || preNodes.has(node.tagName),
-    bold: context.bold || implicitBoldNodes.has(node.tagName),
+      (context.phrasing || checkAttr(node, Attr.STRUCTURE) || checkAttr(node, Attr.INLINE)) &&
+      !checkAttr(node, Attr.ROOT),
+    pre: context.pre || checkAttr(node, Attr.PRE),
+    bold: context.bold || checkAttr(node, Attr.IMPLICIT_BOLD),
   };
-  const visitChild = (child: RootContent) => visitNode(child, childContext);
+
+  /** Visit all children of the current node and normalize the result. */
+  const visitChildren = () =>
+    normalizeChildren(
+      node.children.flatMap((child) => visitNode(child, childContext)),
+      childContext,
+    );
 
   // Google docs creates invalid nested lists (e.g. <ul><ul><li>), fix them
   if (node.tagName === "ul" || node.tagName === "ol") {
-    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+    const children = visitChildren();
 
     if (children.length > 0) {
       return {
         type: "element",
         tagName: node.tagName,
-        properties: {},
+        properties: { start: node.properties.start },
         // Merge non-li children into the previous li
         children: children.reduce<typeof children>((children, child) => {
           if (child.type === "element" && child.tagName === "li") return children.concat(child);
 
-          // Last is guaranteed to be li
+          // If there's no li yet, create an empty one
           const last = (children as Element[]).at(-1) ?? {
             type: "element",
             tagName: "li",
             properties: {},
             children: [],
           };
+
           // All but last
           return children.slice(0, -1).concat({
             // Add `child` at the end of the last li
@@ -320,29 +390,24 @@ function visitElement(
     }
   }
 
-  if (structureNodes.has(node.tagName)) {
-    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+  if (checkAttr(node, Attr.STRUCTURE)) {
+    const children = visitChildren();
     if (children.length > 0) {
       const element: Element = { type: "element", tagName: node.tagName, properties: {}, children };
       return node.tagName === "p" ? splitOnNewLines(element) : element;
     }
   }
 
-  if (tableNodes.has(node.tagName)) {
-    // The only difference with structureNodes is that we keep empty nodes
-    return {
-      type: "element",
-      tagName: node.tagName,
-      properties: {},
-      children: normalizeChildren(node.children.flatMap(visitChild), childContext),
-    };
+  // The only difference with structureNodes is that we keep empty nodes
+  if (checkAttr(node, Attr.TABLE)) {
+    return { type: "element", tagName: node.tagName, properties: {}, children: visitChildren() };
   }
 
   if (node.tagName === "hr") {
     return { type: "element", tagName: "hr", properties: {}, children: [] };
   }
 
-  // Only keep child <br>
+  // Only keep child <br>, not top-level ones
   if (node.tagName === "br" && context.depth > 0 && context.phrasing) {
     return { type: "element", tagName: "br", properties: {}, children: [] };
   }
@@ -352,9 +417,8 @@ function visitElement(
     if (typeof src === "string" && src.startsWith("data:")) {
       const type = src.substring(5, src.indexOf(";"));
       const name = `￼_${context.files.length}_`;
-      const binary = atob(src.slice(src.indexOf("base64,") + 7));
-      const buffer = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
+      // @ts-expect-error Baseline 2025 Newly available
+      const buffer = Uint8Array.fromBase64(src.slice(src.indexOf("base64,") + 7));
       context.files.push(new File([buffer], name, { type }));
       return {
         type: "element",
@@ -370,7 +434,7 @@ function visitElement(
   }
 
   if (node.tagName === "a") {
-    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+    const children = visitChildren();
     if (children.length > 0) {
       return unnestSelfClosing({
         type: "element",
@@ -389,7 +453,7 @@ function visitElement(
       /font-weight\s*:\s*(bold|[789]\d\d)/.test(node.properties.style))
   ) {
     childContext.bold = true;
-    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+    const children = visitChildren();
 
     // If already in bold context, skip this node to avoid nesting
     if (context.bold) return children;
@@ -406,7 +470,7 @@ function visitElement(
       /font-style\s*:\s*italic/.test(node.properties.style))
   ) {
     childContext.italic = true;
-    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+    const children = visitChildren();
 
     // If already in italic context, skip this node to avoid nesting
     if (context.italic) return children;
@@ -424,7 +488,7 @@ function visitElement(
       /text-decoration\s*:\s*line-through/.test(node.properties.style))
   ) {
     childContext.strike = true;
-    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+    const children = visitChildren();
 
     // If already in strike context, skip this node to avoid nesting
     if (context.strike) return children;
@@ -439,8 +503,8 @@ function visitElement(
     }
   }
 
-  if (inlineNodes.has(node.tagName)) {
-    const children = normalizeChildren(node.children.flatMap(visitChild), childContext);
+  if (checkAttr(node, Attr.INLINE)) {
+    const children = visitChildren();
     if (children.length > 0) {
       return unnestSelfClosing({
         type: "element",
@@ -457,14 +521,14 @@ function visitElement(
     childContext,
   );
 
-  // In case we are at the top level and some nodes are text nodes,
+  // In case we are at the top level and some nodes are text nodes, wrap them in a <p>
   if (
     context.depth === 0 &&
     !context.phrasing &&
     children.length > 0 &&
     children.every(
       (child) =>
-        child.type === "text" || (child.type === "element" && inlineNodes.has(child.tagName)),
+        child.type === "text" || (child.type === "element" && checkAttr(child, Attr.INLINE)),
     )
   ) {
     return { type: "element", tagName: "p", properties: {}, children };
