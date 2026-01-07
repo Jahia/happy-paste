@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
     "lib": ["dom", "esnext"],
     "module": "esnext",
     "moduleResolution": "bundler",
