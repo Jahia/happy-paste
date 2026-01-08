@@ -26,7 +26,7 @@ suite("basic tests", () => {
         "files": [
           File ￼_0_: 72 bytes,
         ],
-        "html": "<p><img src="￼_0_"></p>",
+        "html": "<p><img src="￼_0_"><img src="http://example.com/img"></p>",
       }
     `);
   });
@@ -142,6 +142,19 @@ suite("basic tests", () => {
       {
         "files": [],
         "html": "<p><strong>Bold <em>and italic</em></strong></p><h1>Heading inside p</h1><ul><li>List without li</li></ul>",
+      }
+    `);
+  });
+
+  test("lone remote image", () => {
+    expect(
+      process(`<div class="homeIntroRight">
+<div class="home-hero-intro-video">
+<img alt="the-power-of-jahia-dxp" class="figure-img img-fluid home-hero-intro-video-img" data-target="#modal_video_presentation" data-toggle="modal" src="https://cdfoqfniea.cloudimg.io/https://www.jahia.com/files/live/sites/www/files/Landing%20pages/power-of-jahia-dxp.png" data-cmp-ab="2" data-cmp-info="10"></div></div>`),
+    ).toMatchInlineSnapshot(`
+      {
+        "files": [],
+        "html": "<p><img src="https://cdfoqfniea.cloudimg.io/https://www.jahia.com/files/live/sites/www/files/Landing%20pages/power-of-jahia-dxp.png"></p>",
       }
     `);
   });

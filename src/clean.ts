@@ -431,6 +431,16 @@ function visitElement(
         children: [],
       };
     }
+    return {
+      type: "element",
+      tagName: "img",
+      properties: {
+        src,
+        width: node.properties.width || undefined,
+        height: node.properties.height || undefined,
+      },
+      children: [],
+    };
   }
 
   if (node.tagName === "a") {
