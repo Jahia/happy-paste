@@ -1,0 +1,2 @@
+[luxe:happyPaste] > jnt:content, jmix:droppableContent
+- folder (weakreference) < jnt:folder
