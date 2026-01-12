@@ -4,14 +4,12 @@ import {
   type ViewDocumentClipboardInputEvent,
   type EditorConfig,
   EventInfo,
-  FileRepository,
-  type UploadAdapter,
-  type FileLoader,
-  type UploadResponse,
 } from "ckeditor5";
 import { process } from "./clean.ts";
-// import { Button, Modal, ModalBody, ModalFooter, ModalHeader, Typography } from "@jahia/moonstone";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { shallowEqual, useDispatch, useSelector } from "react-redux";
+import { batchActions } from "redux-batched-actions";
+import type { UnknownAction } from "redux";
 
 function guessExtensionFromMimeType(mimeType: string) {
   switch (mimeType) {
@@ -36,54 +34,50 @@ function guessExtensionFromMimeType(mimeType: string) {
   }
 }
 
-export class Base64UploadAdapter extends Plugin {
-  public static get requires() {
-    return [FileRepository] as const;
-  }
-
-  public init(): void {
-    this.editor.plugins.get(FileRepository).createUploadAdapter = (loader) => new Adapter(loader);
-  }
-}
-
-class Adapter implements UploadAdapter {
-  public loader: FileLoader;
-
-  public reader?: FileReader;
-
-  constructor(loader: FileLoader) {
-    this.loader = loader;
-  }
-
-  public upload(): Promise<UploadResponse> {
-    return new Promise((resolve, reject) => {
-      const reader = (this.reader = new window.FileReader());
-
-      reader.addEventListener("load", () => {
-        resolve({ default: reader.result });
-      });
-
-      reader.addEventListener("error", (err) => {
-        reject(err);
-      });
-
-      reader.addEventListener("abort", () => {
-        reject();
-      });
-
-      void this.loader.file.then((file) => {
-        reader.readAsDataURL(file!);
-      });
-    });
-  }
-
-  public abort() {
-    this.reader?.abort();
-  }
+/** Type of objects in the state.jcontent.fileUpload.uploads Redux store */
+interface Upload {
+  id: string;
+  status: "QUEUED" | "UPLOADING" | "UPLOADED" | "FAILED";
+  error: string | null;
+  path: string;
+  file: File;
+  /** Callback when the upload is successfull, specific to happy-paste */
+  happyPasteCallback?: () => void;
 }
 
 function App() {
-  // const [isOpen, setIsOpen] = useState(true);
+  const dispatch = useDispatch();
+  const dispatchBatch = (actions: UnknownAction[]) => dispatch(batchActions(actions) as any);
+
+  // Retrieve all uploads from the Redux store (queued, uploading, uploaded, failed)
+  const uploads: Upload[] = useSelector(
+    (state: any) => state.jcontent.fileUpload.uploads,
+    shallowEqual,
+  );
+
+  // Because uploads are tracked in Redux, we need an effect to monitor their status
+  useEffect(() => {
+    if (!uploads || uploads.length === 0) return;
+
+    // Filter uploads that have a happyPasteCallback
+    const pasteUploads = uploads.filter((u): u is Upload & { happyPasteCallback: () => void } =>
+      Object.hasOwn(u, "happyPasteCallback"),
+    );
+
+    // Check if all tracked uploads are complete
+    if (!pasteUploads.every(({ status }) => status === "UPLOADED")) return;
+
+    // All uploads from a single paste share the same callback, get the first one, call it
+    const { happyPasteCallback } = pasteUploads[0];
+
+    happyPasteCallback();
+
+    // Remove happyPasteCallback to avoid re-calling in the future
+    dispatch({
+      type: "FILEUPLOAD_SET_UPLOADS",
+      payload: uploads.map(({ happyPasteCallback: _, ...upload }) => upload),
+    });
+  }, [uploads]);
 
   class HappyPaste extends Plugin {
     init() {
@@ -99,42 +93,37 @@ function App() {
           // @ts-expect-error The original one is read-only
           data.dataTransfer = new DataTransfer();
           const processed = process(html);
-          if (processed.files.length > 0) {
-            evt.stop();
-            CE_API.openPicker({
-              site: contextJsParameters.siteKey,
-              type: "folder",
-              setValue: async (value) => {
-                const { path } = value[0];
-                const { handleUpload } = registry.get("fileUpload", "default");
 
-                const prefix =
-                  "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
+          if (processed.files.length === 0) {
+            data.dataTransfer.setData("text/html", processed.html);
+            data.dataTransfer.setData("text/plain", text);
+            return;
+          }
 
-                const map = new Map(
-                  processed.files.map((file, index, files) => [
-                    file.name,
+          evt.stop();
+          CE_API.openPicker({
+            site: contextJsParameters.siteKey,
+            lang: contextJsParameters.lang,
+            type: "folder",
+            setValue: async ([{ path }]: Array<{ path: string }>) => {
+              const prefix =
+                "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
+
+              // Map original file (￼_n_) names to new File objects with proper names
+              const map = new Map(
+                processed.files.map((file, index, files) => {
+                  const name =
                     files.length > 1
-                      ? prefix + `-${index}` + guessExtensionFromMimeType(file.type)
-                      : prefix + guessExtensionFromMimeType(file.type),
-                  ]),
-                );
+                      ? prefix + `-${index + 1}` + guessExtensionFromMimeType(file.type)
+                      : prefix + guessExtensionFromMimeType(file.type);
+                  return [file.name, new File([file], name, { type: file.type })];
+                }),
+              );
 
-                await Promise.all(
-                  processed.files.map((file) =>
-                    handleUpload({
-                      path,
-                      file,
-                      filename: map.get(file.name)!,
-                      client: jahia.apolloClient,
-                      lang: contextJsParameters.lang,
-                    }),
-                  ),
-                );
-
-                const updatedHtml = processed.html.replaceAll(
+              const happyPasteCallback = () => {
+                const updatedHtml = html.replaceAll(
                   /￼_\d+_/g,
-                  (match) => `/files/{workspace}${path}/${map.get(match)}`,
+                  (match) => `/files/{workspace}${path}/${map.get(match)?.name}`,
                 );
 
                 console.log("Updated HTML:", updatedHtml);
@@ -142,14 +131,27 @@ function App() {
                 data.dataTransfer.setData("text/html", updatedHtml);
                 data.dataTransfer.setData("text/plain", text);
 
+                // Fire the paste event once for all images
                 this.editor.editing.view.document.fire(new EventInfo(evt.source, evt.name), data);
-              },
-              lang: contextJsParameters.lang,
-            });
-            return;
-          }
-          data.dataTransfer.setData("text/html", processed.html);
-          data.dataTransfer.setData("text/plain", text);
+              };
+
+              const payload = [...map.values()].map<Upload>((file) => ({
+                id: file.name,
+                status: "QUEUED",
+                error: null,
+                path,
+                file,
+                happyPasteCallback,
+              }));
+
+              // Dispatch the actions directly using Redux action types
+              dispatchBatch([
+                { type: "FILEUPLOAD_ADD_UPLOADS", payload: payload },
+                // Something is wrong with the batching implementation, only 1 by 1 works
+                { type: "FILEUPLOAD_TAKE_FROM_QUEUE", payload: 1 },
+              ]);
+            },
+          });
         },
       );
     }
@@ -157,7 +159,7 @@ function App() {
 
   useEffect(() => {
     for (const config of registry.find({ type: "ckeditor5-config" })) {
-      (config as EditorConfig)?.plugins?.push(Base64UploadAdapter, HappyPaste);
+      (config as EditorConfig)?.plugins?.push(HappyPaste);
     }
   });
 
@@ -208,7 +210,7 @@ export default function init() {
 
   registry.add("app", "happy-paste", {
     targets: ["root:17"],
-    render: (next) => (
+    render: (next: ReactNode) => (
       <>
         <App />
         {next}
