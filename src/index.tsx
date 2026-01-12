@@ -16,7 +16,7 @@ interface Upload {
   status: "QUEUED" | "UPLOADING" | "UPLOADED" | "FAILED";
   path: string;
   file: File;
-  /** Callback when the upload is successfull, specific to happy-paste */
+  /** Callback when the upload is successful, specific to happy-paste */
   happyPasteCallback?: () => void;
 }
 
@@ -172,7 +172,7 @@ function HappyPasteComponent() {
         },
       };
     }
-  });
+  }, []);
 
   return undefined; // We don't actually render anything, we just use the component for its context
 }
