@@ -1,0 +1,7 @@
+[role="dialog"][data-sel-role="picker-dialog"][data-sel-type="folder"] {
+  z-index: 12000; /* above ckeditor balloon (11554) */
+}
+
+.ck.ck-button-action.ck-disabled {
+  background: color-mix(in srgb, var(--ck-color-button-action-background), grey 20%) !important;
+}

@@ -1,14 +1,46 @@
+/**
+ * Brace yourself, the information flow is complex.
+ *
+ * When the user pastes content into CKEditor:
+ *  1. CKEditor5 "clipboardInput" event is fired, we intercept it
+ *  2. We clean the HTML, extract embedded images, update the event dataTransfer
+ *  3. If there are no images, we let CKEditor process the event as usual
+ *  4. Otherwise, we stop the event, open a balloon to ask for the upload folder
+ *  5. When the upload folder picker button is clicked, we open the CE file picker and
+ *     when a folder is selected, we update the balloon with the selected path
+ *  6. When the user clicks "Paste" in the balloon, we trigger a "paste" event back to
+ *     the HappyPaste plugin, with the selected path as argument
+ *  7. This event is listened to, and, when fired, we push all extracted images to
+ *     the Redux upload queue with a special happyPasteCallback
+ *  8. Upload progress is tracked in a useEffect in the React component, when complete
+ *     the happyPasteCallback is called
+ *  9. This callback prepares a new "clipboardInput" event and fires it to CKEditor,
+ *     we're back to step 1, but this time the clipboard data contains image URLs instead
+ *     of embedded images
+ *
+ * @module
+ */
 import { registry } from "@jahia/ui-extender";
 import {
   Plugin,
   type ViewDocumentClipboardInputEvent,
   type EditorConfig,
+  ContextualBalloon,
+  BalloonPanelView,
+  Locale,
+  View,
+  LabeledFieldView,
+  createLabeledInputText,
+  ButtonView,
+  IconLocal,
+  clickOutsideHandler,
   EventInfo,
 } from "ckeditor5";
 import { process } from "./clean.ts";
 import { useEffect, type ReactNode } from "react";
 import { shallowEqual, useDispatch, useSelector } from "react-redux";
 import { batchActions } from "redux-batched-actions";
+import "./oskour.css";
 
 /** Type of objects in the state.jcontent.fileUpload.uploads Redux store */
 interface Upload {
@@ -44,14 +76,146 @@ const mimeTypeExtension = new Map([
   ["image/avif", ".avif"],
 ]);
 
+class BalloonContentsView extends View {
+  pickerOpen = false;
+
+  constructor(locale: Locale) {
+    super(locale);
+    const pathInput = new LabeledFieldView(this.locale, createLabeledInputText);
+    pathInput.set({ label: "Upload path", isEnabled: false });
+    const pickerButton = new ButtonView();
+    pickerButton.set({ label: "Choose folder", icon: IconLocal, tooltip: true });
+    const cancelButton = new ButtonView();
+    cancelButton.set({ label: "Cancel", withText: true });
+    const pasteButton = new ButtonView();
+    pasteButton.set({ label: "Paste", withText: true, class: "ck-button-action" });
+    pasteButton.bind("isEnabled").to(pathInput.fieldView, "value", Boolean);
+
+    // In case the user previously selected a path, restore it
+    if (sessionStorage.getItem("happy-paste-last-path"))
+      pathInput.fieldView.value = sessionStorage.getItem("happy-paste-last-path") ?? "";
+
+    pasteButton.on("execute", () => {
+      this.fire("paste", pathInput.fieldView.value);
+    });
+    cancelButton.on("execute", () => {
+      this.fire("cancel");
+    });
+
+    pickerButton.on("execute", () => {
+      this.pickerOpen = true;
+      CE_API.openPicker({
+        site: contextJsParameters.siteKey,
+        lang: contextJsParameters.lang,
+        type: "folder",
+        setValue: async ([{ path }]: Array<{ path: string }>) => {
+          this.pickerOpen = false;
+          pathInput.fieldView.value = path;
+          sessionStorage.setItem("happy-paste-last-path", path);
+        },
+      });
+    });
+
+    this.setTemplate({
+      tag: "div",
+      attributes: {
+        class: ["ck"],
+        style:
+          "max-width:284px;display:flex;flex-direction:column;padding:var(--ck-spacing-standard);gap:var(--ck-spacing-standard)",
+      },
+      children: [
+        {
+          tag: "p",
+          attributes: { style: "white-space:wrap;line-height:1.25" },
+          children: ["Your clipboard contains images. Please choose a folder to upload them to."],
+        },
+        {
+          tag: "div",
+          attributes: { style: "display:flex;gap:var(--ck-spacing-small)" },
+          children: [pathInput, pickerButton],
+        },
+        {
+          tag: "div",
+          attributes: { style: "display:flex;justify-content:space-between" },
+          children: [cancelButton, pasteButton],
+        },
+      ],
+    });
+  }
+}
+
 class HappyPaste extends Plugin {
+  _balloon!: ContextualBalloon;
+  _balloonView!: BalloonPanelView;
+  _balloonContents!: BalloonContentsView;
+  _clipboardData!: ViewDocumentClipboardInputEvent["args"][0];
+  _fileMap!: Map<string, File>;
+
+  static get requires() {
+    return [ContextualBalloon];
+  }
+
   init() {
-    // When something is pasted into the editor:
-    // 1. Retrieve HTML and text/plain from clipboard
-    // 2. Clean the HTML, extract embedded images
-    // 3. If no images, update clipboard data and let CKEditor process as usual
-    // 4. Otherwise, stop the clipboard process, open the folder picker,
-    //    upload all images to the selected folder, then trigger a paste event again
+    this._balloon = this.editor.plugins.get(ContextualBalloon);
+    this._balloonView = new BalloonPanelView(this.editor.locale);
+    this._balloonContents = new BalloonContentsView(this.editor.locale);
+
+    this._balloonView.setTemplate({
+      tag: "div",
+      children: this._balloonView.createCollection([this._balloonContents]),
+    });
+
+    clickOutsideHandler({
+      emitter: this._balloonView,
+      activator: () =>
+        this._balloon.visibleView === this._balloonView && !this._balloonContents.pickerOpen,
+      contextElements: [this._balloon.view.element!],
+      callback: () => this._hideBalloon(),
+    });
+
+    this._balloonContents.on("cancel", () => {
+      this._hideBalloon();
+    });
+
+    this.editor.model.document.on("change:data", () => {
+      this._hideBalloon();
+    });
+
+    this._balloonContents.on("paste", (evt, path: string) => {
+      const happyPasteCallback = () => {
+        // Replace all ￼_n_ with the uploaded file paths
+        this._clipboardData.dataTransfer.setData(
+          "text/html",
+          this._clipboardData.dataTransfer
+            .getData("text/html")
+            .replaceAll(
+              /￼_\d+_/g,
+              (match) => `/files/{workspace}${path}/${this._fileMap.get(match)?.name}`,
+            ),
+        );
+
+        // Fire the paste event once for all images
+        this.editor.editing.view.document.fire(
+          new EventInfo(this.editor.editing.view.document, "clipboardInput"),
+          this._clipboardData,
+        );
+
+        // Hide the balloon when done
+        this._hideBalloon();
+      };
+
+      // Push files to upload queue in Redux
+      this.editor.config.get("happyPaste.uploadFiles")?.(
+        [...this._fileMap.values()].map<Upload>((file) => ({
+          id: file.name,
+          status: "QUEUED",
+          path,
+          file,
+          happyPasteCallback,
+        })),
+      );
+    });
+
     this.listenTo<ViewDocumentClipboardInputEvent>(
       this.editor.editing.view.document,
       "clipboardInput",
@@ -65,17 +229,18 @@ class HappyPaste extends Plugin {
         data.dataTransfer = new DataTransfer();
         const processed = process(html);
 
-        if (processed.files.length === 0) {
-          data.dataTransfer.setData("text/html", processed.html);
-          data.dataTransfer.setData("text/plain", text);
-          return;
-        }
+        data.dataTransfer.setData("text/html", processed.html);
+        data.dataTransfer.setData("text/plain", text);
+
+        if (processed.files.length === 0) return;
 
         evt.stop();
 
+        this._clipboardData = data;
+
         // Map original file (￼_n_) names to new File objects with proper names
         const prefix = "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
-        const map = new Map(
+        this._fileMap = new Map(
           processed.files.map((file, index, files) => {
             const name =
               prefix +
@@ -85,40 +250,25 @@ class HappyPaste extends Plugin {
           }),
         );
 
-        CE_API.openPicker({
-          site: contextJsParameters.siteKey,
-          lang: contextJsParameters.lang,
-          type: "folder",
-          setValue: async ([{ path }]: Array<{ path: string }>) => {
-            const happyPasteCallback = () => {
-              // Replace all ￼_n_ with the uploaded file paths
-              data.dataTransfer.setData(
-                "text/html",
-                processed.html.replaceAll(
-                  /￼_\d+_/g,
-                  (match) => `/files/{workspace}${path}/${map.get(match)?.name}`,
-                ),
-              );
-              data.dataTransfer.setData("text/plain", text);
-
-              // Fire the paste event once for all images
-              this.editor.editing.view.document.fire(new EventInfo(evt.source, evt.name), data);
-            };
-
-            // Push files to upload queue in Redux
-            this.editor.config.get("happyPaste.uploadFiles")?.(
-              [...map.values()].map<Upload>((file) => ({
-                id: file.name,
-                status: "QUEUED",
-                path,
-                file,
-                happyPasteCallback,
-              })),
-            );
-          },
-        });
+        this._showBalloon();
       },
     );
+  }
+
+  _hideBalloon() {
+    if (this._balloon.hasView(this._balloonView)) this._balloon.remove(this._balloonView);
+  }
+
+  _showBalloon() {
+    this._hideBalloon(); // If already visible, remove it first
+
+    const view = this.editor.editing.view;
+    this._balloon.add({
+      view: this._balloonView,
+      position: {
+        target: () => view.domConverter.viewRangeToDom(view.document.selection.getFirstRange()!),
+      },
+    });
   }
 }
 
