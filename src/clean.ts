@@ -425,6 +425,7 @@ function visitElement(
         tagName: "img",
         properties: {
           src: name,
+          alt: node.properties.alt || undefined,
           width: node.properties.width || undefined,
           height: node.properties.height || undefined,
         },
@@ -436,6 +437,7 @@ function visitElement(
       tagName: "img",
       properties: {
         src,
+        alt: node.properties.alt || undefined,
         width: node.properties.width || undefined,
         height: node.properties.height || undefined,
       },
