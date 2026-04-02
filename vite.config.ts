@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [
     jahiaFederationPlugin({
       exposes: {
-        "./init": "./src/index.tsx",
+        "./init": "./src/index.ts",
       },
     }),
     {

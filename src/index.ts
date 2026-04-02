@@ -25,10 +25,10 @@
  *     when a folder is selected, the balloon is updated with the selected path
  *  5. When the user clicks "Paste" in the balloon, we collect the user-edited filenames,
  *     rebuild _fileMap with the new names, and fire a "paste" event on the balloon view
- *  6. This triggers the "paste" listener which pushes all files to the Redux upload
- *     queue with a happyPasteCallback attached to each entry
- *  7. Upload progress is tracked in a useEffect in the React component; when all
- *     happy-paste uploads reach UPLOADED status, happyPasteCallback is called once
+ *  6. This triggers the "paste" listener which stores _happyPasteCallback on the plugin,
+ *     dispatches all files to window.jahia.reduxStore, and subscribes to the store
+ *  7. The store subscriber fires when all uploads reach UPLOADED status, calls
+ *     _happyPasteCallback once, and unsubscribes
  *  8. The callback replaces every ￼_n_ placeholder in _clipboardData's HTML with the
  *     final /files/{workspace}{path}/{filename} URL, then re-fires "clipboardInput"
  *  9. On this second pass, process() sees regular <img src="https://…"> (no data URIs
@@ -55,8 +55,6 @@ import {
   EventInfo,
 } from "ckeditor5";
 import { process } from "./clean.ts";
-import { useEffect, type ReactNode } from "react";
-import { shallowEqual, useDispatch, useSelector } from "react-redux";
 import { batchActions } from "redux-batched-actions";
 import "./oskour.css";
 
@@ -66,20 +64,6 @@ interface Upload {
   status: "QUEUED" | "UPLOADING" | "UPLOADED" | "FAILED";
   path: string;
   file: File;
-  /** Callback when the upload is successful, specific to happy-paste */
-  happyPasteCallback?: () => void;
-}
-
-declare module "@ckeditor/ckeditor5-core" {
-  interface EditorConfig {
-    happyPaste: {
-      /**
-       * Because uploading files is done through Redux, which is only available in
-       * React components, we use a config key to hold the Redux uploadFiles callback
-       */
-      uploadFiles: (files: Upload[]) => void;
-    };
-  }
 }
 
 const mimeTypeExtension = new Map([
@@ -263,9 +247,24 @@ class HappyPaste extends Plugin {
   _balloonContents!: BalloonContentsView;
   _clipboardData!: ViewDocumentClipboardInputEvent["args"][0];
   _fileMap!: Map<string, File>;
+  _happyPasteCallback: (() => void) | null = null;
 
   static get requires() {
     return [ContextualBalloon];
+  }
+
+  private static _buildFileMap(
+    files: File[],
+    nameFn: (file: File, fallback: string) => string,
+  ): Map<string, File> {
+    const prefix = "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
+    return new Map(
+      files.map((file, index, all) => {
+        const ext = mimeTypeExtension.get(file.type) ?? ".png";
+        const fallback = prefix + (all.length > 1 ? `-${index + 1}` : "") + ext;
+        return [`\uFFFC_${index}_`, new File([file], nameFn(file, fallback), { type: file.type })];
+      }),
+    );
   }
 
   init() {
@@ -304,7 +303,7 @@ class HappyPaste extends Plugin {
         }
       }
 
-      const happyPasteCallback = () => {
+      this._happyPasteCallback = () => {
         // Replace every ￼_n_ placeholder with the final server path
         this._clipboardData.dataTransfer.setData(
           "text/html",
@@ -327,23 +326,42 @@ class HappyPaste extends Plugin {
         this._hideBalloon();
       };
 
-      // Push all files to the Redux upload queue; each entry carries happyPasteCallback
-      // so the React component can trigger it once every upload has completed
-      this.editor.config.get("happyPaste.uploadFiles")?.(
-        [...this._fileMap.values()].map<Upload>((file) => ({
-          id: file.name,
-          status: "QUEUED",
-          path,
-          file,
-          happyPasteCallback,
-        })),
+      // Dispatch uploads directly to the Redux store and watch for completion
+      const store = (window as any).jahia.reduxStore;
+      const uploads = [...this._fileMap.values()].map<Upload>((file) => ({
+        id: file.name,
+        status: "QUEUED" as const,
+        path,
+        file,
+      }));
+      const uploadIds = new Set(uploads.map((u) => u.id));
+
+      store.dispatch(
+        batchActions([
+          { type: "FILEUPLOAD_ADD_UPLOADS", payload: uploads },
+          // The upstream lib has a bug where only 1 upload at a time is dequeued
+          { type: "FILEUPLOAD_TAKE_FROM_QUEUE", payload: 1 },
+        ]),
       );
+
+      const unsubscribe = store.subscribe(() => {
+        const allUploads: Upload[] = store.getState().jcontent.fileUpload.uploads;
+        const pasteUploads = allUploads.filter((u) => uploadIds.has(u.id));
+        if (pasteUploads.length === 0 || !pasteUploads.every((u) => u.status === "UPLOADED"))
+          return;
+        unsubscribe();
+        this._happyPasteCallback?.();
+        this._happyPasteCallback = null;
+      });
     });
 
     this.listenTo<ViewDocumentClipboardInputEvent>(
       this.editor.editing.view.document,
       "clipboardInput",
       (evt, data) => {
+        // Ignore a new paste while the balloon is already open
+        if (this._balloon.hasView(this._balloonView)) return;
+
         const dataTransfer = data.dataTransfer;
         const html = dataTransfer.getData("text/html");
         const text = dataTransfer.getData("text/plain");
@@ -357,19 +375,12 @@ class HappyPaste extends Plugin {
         if (!html && imageFiles.length > 0) {
           evt.stop();
 
-          const prefix =
-            "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
-          this._fileMap = new Map(
-            imageFiles.map((file, index, files) => {
-              const ext = mimeTypeExtension.get(file.type) ?? ".png";
-              const name =
-                file.name.toLowerCase() || prefix + (files.length > 1 ? `-${index + 1}` : "") + ext;
-              const placeholder = `\uFFFC_${index}_`;
-              return [placeholder, new File([file], name, { type: file.type })];
-            }),
+          this._fileMap = HappyPaste._buildFileMap(
+            imageFiles,
+            (file, fallback) => file.name.toLowerCase() || fallback,
           );
 
-          // Build synthetic HTML with placeholder srcs so that happyPasteCallback
+          // Build synthetic HTML with placeholder srcs so that _happyPasteCallback
           // can replace them with real URLs in the same way as the rich-text path
           const syntheticHtml = [...this._fileMap.keys()]
             .map((placeholder) => `<img src="${placeholder}">`)
@@ -404,16 +415,7 @@ class HappyPaste extends Plugin {
         this._clipboardData = data;
 
         // Give each extracted image a timestamp-based name and map it to its placeholder
-        const prefix = "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
-        this._fileMap = new Map(
-          processed.files.map((file, index, files) => {
-            const name =
-              prefix +
-              (files.length > 1 ? `-${index + 1}` : "") +
-              (mimeTypeExtension.get(file.type) ?? ".png");
-            return [file.name, new File([file], name, { type: file.type })];
-          }),
-        );
+        this._fileMap = HappyPaste._buildFileMap(processed.files, (_, fallback) => fallback);
 
         this._balloonContents.setFiles(this._fileMap);
         this._showBalloon();
@@ -439,69 +441,15 @@ class HappyPaste extends Plugin {
   }
 }
 
-/** This is not a real UI component, it only exists to interact with React contexts */
-function HappyPasteComponent() {
-  const dispatch = useDispatch();
-
-  // Retrieve all uploads from the Redux store (queued, uploading, uploaded, failed)
-  const uploads: Upload[] = useSelector(
-    (state: any) => state.jcontent.fileUpload.uploads,
-    shallowEqual,
-  );
-
-  // Because uploads are tracked in Redux, we need an effect to monitor their status
-  useEffect(() => {
-    if (!uploads || uploads.length === 0) return;
-
-    // Filter uploads that have a happyPasteCallback
-    const pasteUploads = uploads.filter((u): u is Upload & { happyPasteCallback: () => void } =>
-      Object.hasOwn(u, "happyPasteCallback"),
-    );
-
-    // Check if all tracked uploads are complete
-    if (pasteUploads.length === 0 || !pasteUploads.every(({ status }) => status === "UPLOADED"))
-      return;
-
-    // All uploads from a single paste share the same callback, get the first one, call it
-    pasteUploads[0].happyPasteCallback();
-
-    // Remove happyPasteCallback to avoid re-calling in the future
-    dispatch({
-      type: "FILEUPLOAD_SET_UPLOADS",
-      payload: uploads.map(({ happyPasteCallback: _, ...upload }) => upload),
-    });
-  }, [uploads]);
-
-  // Register CKEditor plugin and configure it
-  useEffect(() => {
-    for (const config of registry.find({ type: "ckeditor5-config" }) as unknown as EditorConfig[]) {
-      (config.extraPlugins ??= []).push(HappyPaste);
-      config.happyPaste = {
-        // This is how we allow the CKEditor plugin to interact with Redux
-        uploadFiles: (payload) => {
-          dispatch(
-            batchActions([
-              { type: "FILEUPLOAD_ADD_UPLOADS", payload },
-              // Something is wrong with the batching implementation, only 1 by 1 works
-              { type: "FILEUPLOAD_TAKE_FROM_QUEUE", payload: 1 },
-            ]) as any,
-          );
-        },
-      };
-    }
-  }, []);
-
-  return undefined; // We don't actually render anything, we just use the component for its context
-}
-
 export default function init() {
-  registry.add("app", "happy-paste", {
-    targets: ["root:17"],
-    render: (next: ReactNode) => (
-      <>
-        <HappyPasteComponent />
-        {next}
-      </>
-    ),
+  registry.add("callback", "happy-paste", {
+    targets: ["jahiaApp-init:99.5"],
+    callback: () => {
+      for (const config of registry.find({
+        type: "ckeditor5-config",
+      }) as unknown as EditorConfig[]) {
+        (config.extraPlugins ??= []).push(HappyPaste);
+      }
+    },
   });
 }
