@@ -1,22 +1,39 @@
 /**
  * Brace yourself, the information flow is complex.
  *
- * When the user pastes content into CKEditor:
- *  1. CKEditor5 "clipboardInput" event is fired, we intercept it
- *  2. We clean the HTML, extract embedded images, update the event dataTransfer
- *  3. If there are no images, we let CKEditor process the event as usual
- *  4. Otherwise, we stop the event, open a balloon to ask for the upload folder
- *  5. When the upload folder picker button is clicked, we open the CE file picker and
- *     when a folder is selected, we update the balloon with the selected path
- *  6. When the user clicks "Paste" in the balloon, we trigger a "paste" event back to
- *     the HappyPaste plugin, with the selected path as argument
- *  7. This event is listened to, and, when fired, we push all extracted images to
- *     the Redux upload queue with a special happyPasteCallback
- *  8. Upload progress is tracked in a useEffect in the React component, when complete
- *     the happyPasteCallback is called
- *  9. This callback prepares a new "clipboardInput" event and fires it to CKEditor,
- *     we're back to step 1, but this time the clipboard data contains image URLs instead
- *     of embedded images
+ * There are two entry points, depending on what is in the clipboard:
+ *
+ * A) Rich text containing embedded (base64) images:
+ *  1. CKEditor5 "clipboardInput" event fires (priority "highest"), we intercept it
+ *  2. We clean the HTML with process(), which extracts embedded images as File objects
+ *     and replaces their src with placeholders (￼_0_, ￼_1_, …)
+ *  3. If there are no embedded images, we let CKEditor process the event as usual
+ *  4. Otherwise, we stop the event, build _fileMap (placeholder → File with a
+ *     timestamp-based name), and show the balloon
+ *
+ * B) Raw image paste (screenshot, image file copied from OS, drag-and-drop):
+ *  1. CKEditor5 "clipboardInput" fires; dataTransfer.files contains the images but
+ *     there is no HTML. We intercept the event (priority "highest") before CKEditor's
+ *     own ImageUpload plugin would otherwise emit filerepository-no-upload-adapter
+ *  2. We build _fileMap from the raw File objects, synthesize a minimal HTML string
+ *     (<img src="￼_0_"> …), store it as _clipboardData, and show the balloon
+ *
+ * Shared flow from step 4 / 2 onwards (both paths):
+ *  3. The balloon shows thumbnails of each image with an editable filename input
+ *     (pre-populated with the generated name) and a folder picker
+ *  4. When the upload folder picker button is clicked, we open the CE file picker;
+ *     when a folder is selected, the balloon is updated with the selected path
+ *  5. When the user clicks "Paste" in the balloon, we collect the user-edited filenames,
+ *     rebuild _fileMap with the new names, and fire a "paste" event on the balloon view
+ *  6. This triggers the "paste" listener which pushes all files to the Redux upload
+ *     queue with a happyPasteCallback attached to each entry
+ *  7. Upload progress is tracked in a useEffect in the React component; when all
+ *     happy-paste uploads reach UPLOADED status, happyPasteCallback is called once
+ *  8. The callback replaces every ￼_n_ placeholder in _clipboardData's HTML with the
+ *     final /files/{workspace}{path}/{filename} URL, then re-fires "clipboardInput"
+ *  9. On this second pass, process() sees regular <img src="https://…"> (no data URIs
+ *     or placeholders), so processed.files is empty, the event is not stopped, and
+ *     CKEditor inserts the images normally
  *
  * @module
  */
@@ -156,7 +173,7 @@ class BalloonContentsView extends View {
     pasteButton.set({ label: "Paste", withText: true, class: "ck-button-action" });
     pasteButton.bind("isEnabled").to(pathInput.fieldView, "value", Boolean);
 
-    // In case the user previously selected a path, restore it
+    // In case the user previously selected a path, restore it so they don't have to re-pick
     if (sessionStorage.getItem("happy-paste-last-path"))
       pathInput.fieldView.value = sessionStorage.getItem("happy-paste-last-path") ?? "";
 
@@ -278,7 +295,7 @@ class HappyPaste extends Plugin {
     });
 
     this._balloonContents.on("paste", (evt, path: string) => {
-      // Update _fileMap with user-defined filenames from the balloon inputs
+      // Collect user-edited filenames and rebuild _fileMap with the new File objects
       const filenames = this._balloonContents.getFilenames();
       for (const [placeholder, file] of this._fileMap) {
         const newName = filenames.get(placeholder);
@@ -288,7 +305,7 @@ class HappyPaste extends Plugin {
       }
 
       const happyPasteCallback = () => {
-        // Replace all ￼_n_ with the uploaded file paths
+        // Replace every ￼_n_ placeholder with the final server path
         this._clipboardData.dataTransfer.setData(
           "text/html",
           this._clipboardData.dataTransfer
@@ -299,17 +316,19 @@ class HappyPaste extends Plugin {
             ),
         );
 
-        // Fire the paste event once for all images
+        // Re-fire clipboardInput; this time process() finds no embedded images,
+        // so CKEditor handles it normally and inserts the images with real URLs
         this.editor.editing.view.document.fire(
           new EventInfo(this.editor.editing.view.document, "clipboardInput"),
           this._clipboardData,
         );
 
-        // Hide the balloon when done
+        // Hide the balloon once the re-fire is queued
         this._hideBalloon();
       };
 
-      // Push files to upload queue in Redux
+      // Push all files to the Redux upload queue; each entry carries happyPasteCallback
+      // so the React component can trigger it once every upload has completed
       this.editor.config.get("happyPaste.uploadFiles")?.(
         [...this._fileMap.values()].map<Upload>((file) => ({
           id: file.name,
@@ -329,7 +348,9 @@ class HappyPaste extends Plugin {
         const html = dataTransfer.getData("text/html");
         const text = dataTransfer.getData("text/plain");
 
-        // Handle pasting raw image files (no HTML wrapper, e.g. screenshot or file drag)
+        // Handle pasting raw image files (no HTML, e.g. screenshot or image file from OS).
+        // We intercept here at "highest" priority, before CKEditor's ImageUpload plugin
+        // would attempt to use a (non-existent) upload adapter.
         const imageFiles = [...(dataTransfer.files ?? [])].filter((f) =>
           mimeTypeExtension.has(f.type),
         );
@@ -348,7 +369,8 @@ class HappyPaste extends Plugin {
             }),
           );
 
-          // Build synthetic HTML so the existing happyPasteCallback can swap placeholders with URLs
+          // Build synthetic HTML with placeholder srcs so that happyPasteCallback
+          // can replace them with real URLs in the same way as the rich-text path
           const syntheticHtml = [...this._fileMap.keys()]
             .map((placeholder) => `<img src="${placeholder}">`)
             .join("");
@@ -366,6 +388,7 @@ class HappyPaste extends Plugin {
 
         if (!html) return;
 
+        // Rich text path: clean the HTML and extract embedded base64 images
         // @ts-expect-error The original one is read-only
         data.dataTransfer = new DataTransfer();
         const processed = process(html);
@@ -373,13 +396,14 @@ class HappyPaste extends Plugin {
         data.dataTransfer.setData("text/html", processed.html);
         data.dataTransfer.setData("text/plain", text);
 
+        // No embedded images — let CKEditor handle the event normally
         if (processed.files.length === 0) return;
 
         evt.stop();
 
         this._clipboardData = data;
 
-        // Map original file (￼_n_) names to new File objects with proper names
+        // Give each extracted image a timestamp-based name and map it to its placeholder
         const prefix = "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
         this._fileMap = new Map(
           processed.files.map((file, index, files) => {
