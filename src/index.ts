@@ -58,6 +58,8 @@ import { process } from "./clean.ts";
 import { batchActions } from "redux-batched-actions";
 import "./oskour.css";
 
+const LAST_PATH_KEY = "happy-paste-last-path";
+
 /** Type of objects in the state.jcontent.fileUpload.uploads Redux store */
 interface Upload {
   id: string;
@@ -158,8 +160,8 @@ class BalloonContentsView extends View {
     pasteButton.bind("isEnabled").to(pathInput.fieldView, "value", Boolean);
 
     // In case the user previously selected a path, restore it so they don't have to re-pick
-    if (sessionStorage.getItem("happy-paste-last-path"))
-      pathInput.fieldView.value = sessionStorage.getItem("happy-paste-last-path") ?? "";
+    if (sessionStorage.getItem(LAST_PATH_KEY))
+      pathInput.fieldView.value = sessionStorage.getItem(LAST_PATH_KEY) ?? "";
 
     pasteButton.on("execute", () => {
       this.fire("paste", pathInput.fieldView.value);
@@ -177,7 +179,7 @@ class BalloonContentsView extends View {
         setValue: async ([{ path }]: Array<{ path: string }>) => {
           this.pickerOpen = false;
           pathInput.fieldView.value = path;
-          sessionStorage.setItem("happy-paste-last-path", path);
+          sessionStorage.setItem(LAST_PATH_KEY, path);
         },
       });
     });
@@ -229,15 +231,12 @@ class BalloonContentsView extends View {
     const oldRows = [...this._fileRows];
     this._fileRows.clear();
     for (const row of oldRows) row.destroy();
-    for (const [placeholder, file] of fileMap) {
+    for (const [placeholder, file] of fileMap)
       this._fileRows.add(new FileRowView(this.locale!, placeholder, file));
-    }
   }
 
   getFilenames(): Map<string, string> {
-    const map = new Map<string, string>();
-    for (const row of this._fileRows) map.set(row.placeholder, row.getFilename());
-    return map;
+    return new Map([...this._fileRows].map((r) => [r.placeholder, r.getFilename()]));
   }
 }
 
@@ -255,7 +254,7 @@ class HappyPaste extends Plugin {
 
   private static _buildFileMap(
     files: File[],
-    nameFn: (file: File, fallback: string) => string,
+    nameFn: (file: File, fallback: string) => string = (_, f) => f,
   ): Map<string, File> {
     const prefix = "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
     return new Map(
@@ -295,12 +294,9 @@ class HappyPaste extends Plugin {
 
     this._balloonContents.on("paste", (evt, path: string) => {
       // Collect user-edited filenames and rebuild _fileMap with the new File objects
-      const filenames = this._balloonContents.getFilenames();
       for (const [placeholder, file] of this._fileMap) {
-        const newName = filenames.get(placeholder);
-        if (newName) {
-          this._fileMap.set(placeholder, new File([file], newName, { type: file.type }));
-        }
+        const newName = this._balloonContents.getFilenames().get(placeholder);
+        if (newName) this._fileMap.set(placeholder, new File([file], newName, { type: file.type }));
       }
 
       this._happyPasteCallback = () => {
@@ -334,7 +330,6 @@ class HappyPaste extends Plugin {
         path,
         file,
       }));
-      const uploadIds = new Set(uploads.map((u) => u.id));
 
       store.dispatch(
         batchActions([
@@ -346,7 +341,7 @@ class HappyPaste extends Plugin {
 
       const unsubscribe = store.subscribe(() => {
         const allUploads: Upload[] = store.getState().jcontent.fileUpload.uploads;
-        const pasteUploads = allUploads.filter((u) => uploadIds.has(u.id));
+        const pasteUploads = allUploads.filter((u) => uploads.some((up) => up.id === u.id));
         if (pasteUploads.length === 0 || !pasteUploads.every((u) => u.status === "UPLOADED"))
           return;
         unsubscribe();
@@ -375,14 +370,14 @@ class HappyPaste extends Plugin {
         if (!html && imageFiles.length > 0) {
           evt.stop();
 
-          this._fileMap = HappyPaste._buildFileMap(
+          const fileMap = HappyPaste._buildFileMap(
             imageFiles,
             (file, fallback) => file.name.toLowerCase() || fallback,
           );
 
           // Build synthetic HTML with placeholder srcs so that _happyPasteCallback
           // can replace them with real URLs in the same way as the rich-text path
-          const syntheticHtml = [...this._fileMap.keys()]
+          const syntheticHtml = [...fileMap.keys()]
             .map((placeholder) => `<img src="${placeholder}">`)
             .join("");
 
@@ -392,8 +387,7 @@ class HappyPaste extends Plugin {
           data.dataTransfer.setData("text/plain", "");
 
           this._clipboardData = data;
-          this._balloonContents.setFiles(this._fileMap);
-          this._showBalloon();
+          this._openBalloon(fileMap);
           return;
         }
 
@@ -413,12 +407,7 @@ class HappyPaste extends Plugin {
         evt.stop();
 
         this._clipboardData = data;
-
-        // Give each extracted image a timestamp-based name and map it to its placeholder
-        this._fileMap = HappyPaste._buildFileMap(processed.files, (_, fallback) => fallback);
-
-        this._balloonContents.setFiles(this._fileMap);
-        this._showBalloon();
+        this._openBalloon(HappyPaste._buildFileMap(processed.files));
       },
       { priority: "highest" },
     );
@@ -426,6 +415,12 @@ class HappyPaste extends Plugin {
 
   _hideBalloon() {
     if (this._balloon.hasView(this._balloonView)) this._balloon.remove(this._balloonView);
+  }
+
+  _openBalloon(fileMap: Map<string, File>) {
+    this._fileMap = fileMap;
+    this._balloonContents.setFiles(fileMap);
+    this._showBalloon();
   }
 
   _showBalloon() {
