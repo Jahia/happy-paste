@@ -29,6 +29,7 @@ import {
   BalloonPanelView,
   Locale,
   View,
+  ViewCollection,
   LabeledFieldView,
   createLabeledInputText,
   ButtonView,
@@ -76,15 +77,79 @@ const mimeTypeExtension = new Map([
   ["image/avif", ".avif"],
 ]);
 
+class FileRowView extends View {
+  readonly placeholder: string;
+  private readonly _extension: string;
+  private readonly _objectUrl: string;
+  /** Closure so TypeScript infers InputTextView (which has .value) from the constructor call */
+  private readonly _getValue: () => string;
+
+  constructor(locale: Locale, placeholder: string, file: File) {
+    super(locale);
+    this.placeholder = placeholder;
+    this._objectUrl = URL.createObjectURL(file);
+    this._extension = mimeTypeExtension.get(file.type) ?? ".png";
+
+    const baseName = file.name.endsWith(this._extension)
+      ? file.name.slice(0, -this._extension.length)
+      : file.name;
+
+    const inputView = new LabeledFieldView(locale, createLabeledInputText);
+    inputView.set({ label: "File name" });
+    inputView.extendTemplate({ attributes: { style: "flex:1" } });
+    inputView.fieldView.extendTemplate({ attributes: { style: "width:100%" } });
+    inputView.fieldView.value = baseName;
+    this._getValue = () => inputView.fieldView.element?.value ?? inputView.fieldView.value ?? "";
+
+    this.setTemplate({
+      tag: "div",
+      attributes: {
+        style: "display:flex;align-items:center;gap:var(--ck-spacing-small)",
+      },
+      children: [
+        {
+          tag: "img",
+          attributes: {
+            src: this._objectUrl,
+            style: "width:48px;height:48px;object-fit:scale-down;border-radius:2px;flex-shrink:0",
+          },
+        },
+        inputView,
+        {
+          tag: "span",
+          attributes: {
+            style:
+              "white-space:nowrap;color:var(--ck-color-text);opacity:0.6;font-size:var(--ck-font-size-base)",
+          },
+          children: [this._extension],
+        },
+      ],
+    });
+  }
+
+  getFilename(): string {
+    return this._getValue() + this._extension;
+  }
+
+  destroy() {
+    URL.revokeObjectURL(this._objectUrl);
+    return super.destroy();
+  }
+}
+
 class BalloonContentsView extends View {
   pickerOpen = false;
+  private _fileRows: ViewCollection<FileRowView>;
 
   constructor(locale: Locale) {
     super(locale);
+    this._fileRows = this.createCollection();
     const pathInput = new LabeledFieldView(this.locale, createLabeledInputText);
     pathInput.set({ label: "Upload path", isEnabled: false });
+    pathInput.extendTemplate({ attributes: { style: "flex:1" } });
+    pathInput.fieldView.extendTemplate({ attributes: { style: "width:100%" } });
     const pickerButton = new ButtonView();
-    pickerButton.set({ label: "Choose folder", icon: IconLocal, tooltip: true });
+    pickerButton.set({ label: "Choose", icon: IconLocal, withText: true });
     const cancelButton = new ButtonView();
     cancelButton.set({ label: "Cancel", withText: true });
     const pasteButton = new ButtonView();
@@ -121,26 +186,57 @@ class BalloonContentsView extends View {
       attributes: {
         class: ["ck"],
         style:
-          "max-width:284px;display:flex;flex-direction:column;padding:var(--ck-spacing-standard);gap:var(--ck-spacing-standard)",
+          "max-width:400px;display:flex;flex-direction:column;padding-block:var(--ck-spacing-standard);gap:var(--ck-spacing-standard)",
       },
       children: [
         {
           tag: "p",
-          attributes: { style: "white-space:wrap;line-height:1.25" },
+          attributes: {
+            style: "white-space:wrap;line-height:1.25;padding-inline:var(--ck-spacing-standard)",
+          },
           children: ["Your clipboard contains images. Please choose a folder to upload them to."],
         },
         {
           tag: "div",
-          attributes: { style: "display:flex;gap:var(--ck-spacing-small)" },
+          attributes: {
+            style:
+              "max-height:192px;overflow-y:auto;display:flex;flex-direction:column;gap:var(--ck-spacing-small);padding-inline:var(--ck-spacing-standard);margin-block-end:var(--ck-spacing-standard)",
+          },
+          children: this._fileRows,
+        },
+        {
+          tag: "div",
+          attributes: {
+            style:
+              "display:flex;gap:var(--ck-spacing-small);padding-inline:var(--ck-spacing-standard)",
+          },
           children: [pathInput, pickerButton],
         },
         {
           tag: "div",
-          attributes: { style: "display:flex;justify-content:space-between" },
+          attributes: {
+            style:
+              "display:flex;justify-content:space-between;padding-inline:var(--ck-spacing-standard)",
+          },
           children: [cancelButton, pasteButton],
         },
       ],
     });
+  }
+
+  setFiles(fileMap: Map<string, File>) {
+    const oldRows = [...this._fileRows];
+    this._fileRows.clear();
+    for (const row of oldRows) row.destroy();
+    for (const [placeholder, file] of fileMap) {
+      this._fileRows.add(new FileRowView(this.locale!, placeholder, file));
+    }
+  }
+
+  getFilenames(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const row of this._fileRows) map.set(row.placeholder, row.getFilename());
+    return map;
   }
 }
 
@@ -182,6 +278,15 @@ class HappyPaste extends Plugin {
     });
 
     this._balloonContents.on("paste", (evt, path: string) => {
+      // Update _fileMap with user-defined filenames from the balloon inputs
+      const filenames = this._balloonContents.getFilenames();
+      for (const [placeholder, file] of this._fileMap) {
+        const newName = filenames.get(placeholder);
+        if (newName) {
+          this._fileMap.set(placeholder, new File([file], newName, { type: file.type }));
+        }
+      }
+
       const happyPasteCallback = () => {
         // Replace all ￼_n_ with the uploaded file paths
         this._clipboardData.dataTransfer.setData(
@@ -250,6 +355,7 @@ class HappyPaste extends Plugin {
           }),
         );
 
+        this._balloonContents.setFiles(this._fileMap);
         this._showBalloon();
       },
     );
