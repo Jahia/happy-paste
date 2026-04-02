@@ -328,6 +328,42 @@ class HappyPaste extends Plugin {
         const dataTransfer = data.dataTransfer;
         const html = dataTransfer.getData("text/html");
         const text = dataTransfer.getData("text/plain");
+
+        // Handle pasting raw image files (no HTML wrapper, e.g. screenshot or file drag)
+        const imageFiles = [...(dataTransfer.files ?? [])].filter((f) =>
+          mimeTypeExtension.has(f.type),
+        );
+        if (!html && imageFiles.length > 0) {
+          evt.stop();
+
+          const prefix =
+            "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
+          this._fileMap = new Map(
+            imageFiles.map((file, index, files) => {
+              const ext = mimeTypeExtension.get(file.type) ?? ".png";
+              const name =
+                file.name.toLowerCase() || prefix + (files.length > 1 ? `-${index + 1}` : "") + ext;
+              const placeholder = `\uFFFC_${index}_`;
+              return [placeholder, new File([file], name, { type: file.type })];
+            }),
+          );
+
+          // Build synthetic HTML so the existing happyPasteCallback can swap placeholders with URLs
+          const syntheticHtml = [...this._fileMap.keys()]
+            .map((placeholder) => `<img src="${placeholder}">`)
+            .join("");
+
+          // @ts-expect-error The original one is read-only
+          data.dataTransfer = new DataTransfer();
+          data.dataTransfer.setData("text/html", syntheticHtml);
+          data.dataTransfer.setData("text/plain", "");
+
+          this._clipboardData = data;
+          this._balloonContents.setFiles(this._fileMap);
+          this._showBalloon();
+          return;
+        }
+
         if (!html) return;
 
         // @ts-expect-error The original one is read-only
@@ -358,6 +394,7 @@ class HappyPaste extends Plugin {
         this._balloonContents.setFiles(this._fileMap);
         this._showBalloon();
       },
+      { priority: "highest" },
     );
   }
 
