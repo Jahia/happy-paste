@@ -114,6 +114,7 @@ class FileRowView extends View {
           tag: "img",
           attributes: {
             src: this._objectUrl,
+            alt: file.name,
             style: "width:48px;height:48px;object-fit:scale-down;border-radius:2px;flex-shrink:0",
           },
         },
@@ -195,7 +196,8 @@ class BalloonContentsView extends View {
         {
           tag: "p",
           attributes: {
-            style: "white-space:wrap;line-height:1.25;padding-inline:var(--ck-spacing-standard)",
+            style:
+              "white-space:normal;overflow-wrap:anywhere;line-height:1.25;padding-inline:var(--ck-spacing-standard)",
           },
           children: ["Your clipboard contains images. Please choose a folder to upload them to."],
         },
@@ -294,8 +296,9 @@ class HappyPaste extends Plugin {
 
     this._balloonContents.on("paste", (evt, path: string) => {
       // Collect user-edited filenames and rebuild _fileMap with the new File objects
+      const filenames = this._balloonContents.getFilenames();
       for (const [placeholder, file] of this._fileMap) {
-        const newName = this._balloonContents.getFilenames().get(placeholder);
+        const newName = filenames.get(placeholder);
         if (newName) this._fileMap.set(placeholder, new File([file], newName, { type: file.type }));
       }
 
@@ -307,7 +310,8 @@ class HappyPaste extends Plugin {
             .getData("text/html")
             .replaceAll(
               /￼_\d+_/g,
-              (match) => `/files/{workspace}${path}/${this._fileMap.get(match)?.name}`,
+              (match) =>
+                `/files/{workspace}${path}/${encodeURIComponent(this._fileMap.get(match)?.name ?? "")}`,
             ),
         );
 
@@ -324,8 +328,9 @@ class HappyPaste extends Plugin {
 
       // Dispatch uploads directly to the Redux store and watch for completion
       const store = (window as any).jahia.reduxStore;
-      const uploads = [...this._fileMap.values()].map<Upload>((file) => ({
-        id: file.name,
+      // Use placeholder as the stable id — file.name is user-editable and may collide
+      const uploads = [...this._fileMap.entries()].map<Upload>(([placeholder, file]) => ({
+        id: placeholder,
         status: "QUEUED" as const,
         path,
         file,
@@ -342,8 +347,14 @@ class HappyPaste extends Plugin {
       const unsubscribe = store.subscribe(() => {
         const allUploads: Upload[] = store.getState().jcontent.fileUpload.uploads;
         const pasteUploads = allUploads.filter((u) => uploads.some((up) => up.id === u.id));
-        if (pasteUploads.length === 0 || !pasteUploads.every((u) => u.status === "UPLOADED"))
+        if (pasteUploads.length === 0) return;
+        if (pasteUploads.some((u) => u.status === "FAILED")) {
+          unsubscribe();
+          this._happyPasteCallback = null;
+          console.error("[happy-paste] One or more image uploads failed.");
           return;
+        }
+        if (!pasteUploads.every((u) => u.status === "UPLOADED")) return;
         unsubscribe();
         this._happyPasteCallback?.();
         this._happyPasteCallback = null;
