@@ -1,42 +1,3 @@
-/**
- * Brace yourself, the information flow is complex.
- *
- * There are two entry points, depending on what is in the clipboard:
- *
- * A) Rich text containing embedded (base64) images:
- *  1. CKEditor5 "clipboardInput" event fires (priority "highest"), we intercept it
- *  2. We clean the HTML with process(), which extracts embedded images as File objects
- *     and replaces their src with placeholders (￼_0_, ￼_1_, …)
- *  3. If there are no embedded images, we let CKEditor process the event as usual
- *  4. Otherwise, we stop the event, build _fileMap (placeholder → File with a
- *     timestamp-based name), and show the balloon
- *
- * B) Raw image paste (screenshot, image file copied from OS, drag-and-drop):
- *  1. CKEditor5 "clipboardInput" fires; dataTransfer.files contains the images but
- *     there is no HTML. We intercept the event (priority "highest") before CKEditor's
- *     own ImageUpload plugin would otherwise emit filerepository-no-upload-adapter
- *  2. We build _fileMap from the raw File objects, synthesize a minimal HTML string
- *     (<img src="￼_0_"> …), store it as _clipboardData, and show the balloon
- *
- * Shared flow from step 4 / 2 onwards (both paths):
- *  3. The balloon shows thumbnails of each image with an editable filename input
- *     (pre-populated with the generated name) and a folder picker
- *  4. When the upload folder picker button is clicked, we open the CE file picker;
- *     when a folder is selected, the balloon is updated with the selected path
- *  5. When the user clicks "Paste" in the balloon, we collect the user-edited filenames,
- *     rebuild _fileMap with the new names, and fire a "paste" event on the balloon view
- *  6. This triggers the "paste" listener which stores _happyPasteCallback on the plugin,
- *     dispatches all files to window.jahia.reduxStore, and subscribes to the store
- *  7. The store subscriber fires when all uploads reach UPLOADED status, calls
- *     _happyPasteCallback once, and unsubscribes
- *  8. The callback replaces every ￼_n_ placeholder in _clipboardData's HTML with the
- *     final /files/{workspace}{path}/{filename} URL, then re-fires "clipboardInput"
- *  9. On this second pass, process() sees regular <img src="https://…"> (no data URIs
- *     or placeholders), so processed.files is empty, the event is not stopped, and
- *     CKEditor inserts the images normally
- *
- * @module
- */
 import { registry } from "@jahia/ui-extender";
 import {
   Plugin,
@@ -80,16 +41,19 @@ const mimeTypeExtension = new Map([
   ["image/avif", ".avif"],
 ]);
 
-class FileRowView extends View {
-  readonly placeholder: string;
+/** CK5 UI element with [image] [input] .ext */
+class HPFileRowView extends View {
+  private readonly _id: string;
+  private readonly _file: File;
   private readonly _extension: string;
   private readonly _objectUrl: string;
   /** Closure so TypeScript infers InputTextView (which has .value) from the constructor call */
   private readonly _getValue: () => string;
 
-  constructor(locale: Locale, placeholder: string, file: File) {
+  constructor(locale: Locale, id: string, file: File) {
     super(locale);
-    this.placeholder = placeholder;
+    this._id = id;
+    this._file = file;
     this._objectUrl = URL.createObjectURL(file);
     this._extension = mimeTypeExtension.get(file.type) ?? ".png";
 
@@ -131,8 +95,12 @@ class FileRowView extends View {
     });
   }
 
-  getFilename(): string {
-    return this._getValue() + this._extension;
+  getFile(): File {
+    return new File([this._file], this._getValue() + this._extension, { type: this._file.type });
+  }
+
+  getId(): string {
+    return this._id;
   }
 
   destroy() {
@@ -141,9 +109,9 @@ class FileRowView extends View {
   }
 }
 
-class BalloonContentsView extends View {
+class HPBalloonContentsView extends View {
   pickerOpen = false;
-  private _fileRows: ViewCollection<FileRowView>;
+  private _fileRows: ViewCollection<HPFileRowView>;
 
   constructor(locale: Locale) {
     super(locale);
@@ -233,60 +201,43 @@ class BalloonContentsView extends View {
     const oldRows = [...this._fileRows];
     this._fileRows.clear();
     for (const row of oldRows) row.destroy();
-    for (const [placeholder, file] of fileMap)
-      this._fileRows.add(new FileRowView(this.locale!, placeholder, file));
+    for (const [id, file] of fileMap) this._fileRows.add(new HPFileRowView(this.locale!, id, file));
   }
 
-  getFilenames(): Map<string, string> {
-    return new Map([...this._fileRows].map((r) => [r.placeholder, r.getFilename()]));
+  getFiles(): Map<string, File> {
+    return new Map(this._fileRows.map((r) => [r.getId(), r.getFile()]));
   }
 }
 
 class HappyPaste extends Plugin {
   _balloon!: ContextualBalloon;
   _balloonView!: BalloonPanelView;
-  _balloonContents!: BalloonContentsView;
   _clipboardData!: ViewDocumentClipboardInputEvent["args"][0];
-  _fileMap!: Map<string, File>;
   _happyPasteCallback: (() => void) | null = null;
 
   static get requires() {
     return [ContextualBalloon];
   }
 
-  private static _buildFileMap(
-    files: File[],
-    nameFn: (file: File, fallback: string) => string = (_, f) => f,
-  ): Map<string, File> {
-    const prefix = "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
-    return new Map(
-      files.map((file, index, all) => {
-        const ext = mimeTypeExtension.get(file.type) ?? ".png";
-        const fallback = prefix + (all.length > 1 ? `-${index + 1}` : "") + ext;
-        return [`\uFFFC_${index}_`, new File([file], nameFn(file, fallback), { type: file.type })];
-      }),
-    );
-  }
-
   init() {
     this._balloon = this.editor.plugins.get(ContextualBalloon);
     this._balloonView = new BalloonPanelView(this.editor.locale);
-    this._balloonContents = new BalloonContentsView(this.editor.locale);
+    const balloonContents = new HPBalloonContentsView(this.editor.locale);
 
     this._balloonView.setTemplate({
       tag: "div",
-      children: this._balloonView.createCollection([this._balloonContents]),
+      children: this._balloonView.createCollection([balloonContents]),
     });
 
     clickOutsideHandler({
       emitter: this._balloonView,
       activator: () =>
-        this._balloon.visibleView === this._balloonView && !this._balloonContents.pickerOpen,
+        this._balloon.visibleView === this._balloonView && !balloonContents.pickerOpen,
       contextElements: [this._balloon.view.element!],
       callback: () => this._hideBalloon(),
     });
 
-    this._balloonContents.on("cancel", () => {
+    balloonContents.on("cancel", () => {
       this._hideBalloon();
     });
 
@@ -294,13 +245,8 @@ class HappyPaste extends Plugin {
       this._hideBalloon();
     });
 
-    this._balloonContents.on("paste", (evt, path: string) => {
-      // Collect user-edited filenames and rebuild _fileMap with the new File objects
-      const filenames = this._balloonContents.getFilenames();
-      for (const [placeholder, file] of this._fileMap) {
-        const newName = filenames.get(placeholder);
-        if (newName) this._fileMap.set(placeholder, new File([file], newName, { type: file.type }));
-      }
+    balloonContents.on("paste", (evt, path: string) => {
+      const files = balloonContents.getFiles();
 
       this._happyPasteCallback = () => {
         // Replace every ￼_n_ placeholder with the final server path
@@ -311,7 +257,7 @@ class HappyPaste extends Plugin {
             .replaceAll(
               /￼_\d+_/g,
               (match) =>
-                `/files/{workspace}${path}/${encodeURIComponent(this._fileMap.get(match)?.name ?? "")}`,
+                `/files/{workspace}${path}/${encodeURIComponent(files.get(match)?.name ?? "")}`,
             ),
         );
 
@@ -329,8 +275,8 @@ class HappyPaste extends Plugin {
       // Dispatch uploads directly to the Redux store and watch for completion
       const store = (window as any).jahia.reduxStore;
       // Use placeholder as the stable id — file.name is user-editable and may collide
-      const uploads = [...this._fileMap.entries()].map<Upload>(([placeholder, file]) => ({
-        id: placeholder,
+      const uploads = [...files].map<Upload>(([id, file]) => ({
+        id,
         status: "QUEUED" as const,
         path,
         file,
@@ -381,24 +327,20 @@ class HappyPaste extends Plugin {
         if (!html && imageFiles.length > 0) {
           evt.stop();
 
-          const fileMap = HappyPaste._buildFileMap(
-            imageFiles,
-            (file, fallback) => file.name.toLowerCase() || fallback,
-          );
-
-          // Build synthetic HTML with placeholder srcs so that _happyPasteCallback
-          // can replace them with real URLs in the same way as the rich-text path
-          const syntheticHtml = [...fileMap.keys()]
-            .map((placeholder) => `<img src="${placeholder}">`)
-            .join("");
-
           // @ts-expect-error The original one is read-only
           data.dataTransfer = new DataTransfer();
-          data.dataTransfer.setData("text/html", syntheticHtml);
           data.dataTransfer.setData("text/plain", "");
 
+          // Create a minimal HTML with placeholders
+          const fileMap = new Map(imageFiles.map((file, index) => [`￼_${index}_`, file]));
+          data.dataTransfer.setData(
+            "text/html",
+            [...fileMap.keys()].map((placeholder) => `<img src="${placeholder}">`).join(""),
+          );
+
           this._clipboardData = data;
-          this._openBalloon(fileMap);
+          balloonContents.setFiles(fileMap);
+          this._showBalloon();
           return;
         }
 
@@ -418,7 +360,19 @@ class HappyPaste extends Plugin {
         evt.stop();
 
         this._clipboardData = data;
-        this._openBalloon(HappyPaste._buildFileMap(processed.files));
+
+        const prefix = "clipboard-" + new Date().toISOString().replace(/[T:.]/g, "-").slice(0, 19);
+        balloonContents.setFiles(
+          new Map(
+            processed.files.map((file, index) => {
+              const ext = mimeTypeExtension.get(file.type) ?? ".png";
+              const generatedName =
+                prefix + (processed.files.length > 1 ? `-${index + 1}` : "") + ext;
+              return [file.name, new File([file], generatedName, { type: file.type })];
+            }),
+          ),
+        );
+        this._showBalloon();
       },
       { priority: "highest" },
     );
@@ -426,12 +380,6 @@ class HappyPaste extends Plugin {
 
   _hideBalloon() {
     if (this._balloon.hasView(this._balloonView)) this._balloon.remove(this._balloonView);
-  }
-
-  _openBalloon(fileMap: Map<string, File>) {
-    this._fileMap = fileMap;
-    this._balloonContents.setFiles(fileMap);
-    this._showBalloon();
   }
 
   _showBalloon() {
