@@ -78,7 +78,7 @@ class HPFileRowView extends View {
           tag: "img",
           attributes: {
             src: this._objectUrl,
-            alt: file.name,
+            alt: "",
             style: "width:48px;height:48px;object-fit:scale-down;border-radius:2px;flex-shrink:0",
           },
         },
@@ -335,7 +335,7 @@ class HappyPaste extends Plugin {
           const fileMap = new Map(imageFiles.map((file, index) => [`￼_${index}_`, file]));
           data.dataTransfer.setData(
             "text/html",
-            [...fileMap.keys()].map((placeholder) => `<img src="${placeholder}">`).join(""),
+            [...fileMap.keys()].map((placeholder) => `<img alt="" src="${placeholder}">`).join(""),
           );
 
           this._clipboardData = data;
