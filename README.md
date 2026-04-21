@@ -1,13 +1,11 @@
 # Happy Paste
 
-A Jahia module to paste content happily.
+A Jahia module to paste content happily in rich texts:
 
-Features:
+- Automatically remove formatting while preserving basic structure when pasting from Microsoft Word, Google Docs and similar rich text editors.
+- Extract images from the pasted content and upload them to the media library.
 
-- [ ] Paste rich content and choose between pasting as is, as plain text, or as structured content.
-- [ ] Extract images from pasted content and upload them to the media library.
-
-![Screenshot of the WIP paste balloon](screenshot.png)
+![Screenshot of the Happy Paste module](screenshot.png)
 
 ## Installation
 
