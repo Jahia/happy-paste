@@ -2695,6 +2695,7 @@ __metadata:
     ckeditor5: "npm:^45.2.2"
     hast-util-from-html-isomorphic: "npm:^2.0.0"
     hast-util-to-html: "npm:^9.0.5"
+    i18next: "npm:^26.0.6"
     oxfmt: "npm:^0.43.0"
     oxlint: "npm:^1.58.0"
     oxlint-tsgolint: "npm:^0.19.0"
@@ -2856,6 +2857,20 @@ __metadata:
     agent-base: "npm:^7.1.2"
     debug: "npm:4"
   checksum: 10c0/f729219bc735edb621fa30e6e84e60ee5d00802b8247aac0d7b79b0bd6d4b3294737a337b93b86a0bd9e68099d031858a39260c976dc14cdbba238ba1f8779ac
+  languageName: node
+  linkType: hard
+
+"i18next@npm:^26.0.6":
+  version: 26.0.6
+  resolution: "i18next@npm:26.0.6"
+  dependencies:
+    "@babel/runtime": "npm:^7.29.2"
+  peerDependencies:
+    typescript: ^5 || ^6
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: 10c0/3a2d81352393657fabf9903990e6cc3232ff4935ea131ecf6326d80aaf8394f7cb1099a00cad705ecc5b083ffcba80f45e6e77dfa2ca16c64ce1ef4c9de2d9c9
   languageName: node
   linkType: hard
 

@@ -10,7 +10,7 @@ node_modules
 # Build output
 coverage
 dist
-javascript
+javascript/apps
 .__*
 
 # Misc

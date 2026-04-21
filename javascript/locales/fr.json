@@ -1,0 +1,8 @@
+{
+  "fileName": "Nom du fichier",
+  "uploadPath": "Dossier de destination",
+  "choose": "Choisir",
+  "cancel": "Annuler",
+  "paste": "Coller",
+  "clipboardImages": "Votre presse-papiers contient des images. Veuillez choisir un dossier pour les téléverser."
+}

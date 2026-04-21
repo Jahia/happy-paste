@@ -1,3 +1,4 @@
+import i18next from "i18next";
 import { registry } from "@jahia/ui-extender";
 import {
   Plugin,
@@ -19,6 +20,8 @@ import { process } from "./clean.ts";
 import type { Store } from "redux";
 import { batchActions } from "redux-batched-actions";
 import "./oskour.css";
+
+const t = i18next.getFixedT(null, "happy-paste");
 
 const LAST_PATH_KEY = "happy-paste-last-path";
 
@@ -63,7 +66,7 @@ class HPFileRowView extends View {
       : file.name;
 
     const inputView = new LabeledFieldView(locale, createLabeledInputText);
-    inputView.set({ label: "File name" });
+    inputView.set({ label: t("fileName") });
     inputView.extendTemplate({ attributes: { style: "flex:1" } });
     inputView.fieldView.extendTemplate({ attributes: { style: "width:100%" } });
     inputView.fieldView.value = baseName;
@@ -118,15 +121,23 @@ class HPBalloonContentsView extends View {
     super(locale);
     this._fileRows = this.createCollection();
     const pathInput = new LabeledFieldView(this.locale, createLabeledInputText);
-    pathInput.set({ label: "Upload path", isEnabled: false });
+    pathInput.set({ label: t("uploadPath"), isEnabled: false });
     pathInput.extendTemplate({ attributes: { style: "flex:1" } });
     pathInput.fieldView.extendTemplate({ attributes: { style: "width:100%" } });
     const pickerButton = new ButtonView();
-    pickerButton.set({ label: "Choose", icon: IconLocal, withText: true });
+    pickerButton.set({
+      label: t("choose"),
+      icon: IconLocal,
+      withText: true,
+    });
     const cancelButton = new ButtonView();
-    cancelButton.set({ label: "Cancel", withText: true });
+    cancelButton.set({ label: t("cancel"), withText: true });
     const pasteButton = new ButtonView();
-    pasteButton.set({ label: "Paste", withText: true, class: "ck-button-action" });
+    pasteButton.set({
+      label: t("paste"),
+      withText: true,
+      class: "ck-button-action",
+    });
     pasteButton.bind("isEnabled").to(pathInput.fieldView, "value", Boolean);
 
     // In case the user previously selected a path, restore it so they don't have to re-pick
@@ -168,7 +179,7 @@ class HPBalloonContentsView extends View {
             style:
               "white-space:normal;overflow-wrap:anywhere;line-height:1.25;padding-inline:var(--ck-spacing-standard)",
           },
-          children: ["Your clipboard contains images. Please choose a folder to upload them to."],
+          children: [t("clipboardImages")],
         },
         {
           tag: "div",
@@ -401,6 +412,9 @@ class HappyPaste extends Plugin {
 }
 
 export default function init() {
+  // Let the app-shell load the translations for us using path conventions
+  void i18next.loadNamespaces("happy-paste");
+
   registry.add("callback", "happy-paste", {
     targets: ["jahiaApp-init:99.5"],
     callback: () => {
