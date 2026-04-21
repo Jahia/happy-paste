@@ -324,11 +324,9 @@ class HappyPaste extends Plugin {
       this.editor.editing.view.document,
       "clipboardInput",
       (evt, data) => {
-        // Ignore a new paste while the balloon is already open
-        if (this._balloon.hasView(this._balloonView)) {
-          evt.stop();
-          return;
-        }
+        // If the balloon is already visible, it means the user clicked "Paste" and
+        // we're delegating to CK to complete the insertion
+        if (this._balloon.hasView(this._balloonView)) return;
 
         const dataTransfer = data.dataTransfer;
         const html = dataTransfer.getData("text/html");
