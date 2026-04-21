@@ -16,6 +16,7 @@ import {
   EventInfo,
 } from "ckeditor5";
 import { process } from "./clean.ts";
+import type { Store } from "redux";
 import { batchActions } from "redux-batched-actions";
 import "./oskour.css";
 
@@ -273,7 +274,7 @@ class HappyPaste extends Plugin {
       };
 
       // Dispatch uploads directly to the Redux store and watch for completion
-      const store = (window as any).jahia.reduxStore;
+      const store: Store = (window.jahia as any).reduxStore;
       // Use placeholder as the stable id — file.name is user-editable and may collide
       const uploads = [...files].map<Upload>(([id, file]) => ({
         id,
@@ -283,6 +284,7 @@ class HappyPaste extends Plugin {
       }));
 
       store.dispatch(
+        // @ts-expect-error Incompatible redux libs
         batchActions([
           { type: "FILEUPLOAD_ADD_UPLOADS", payload: uploads },
           // The upstream lib has a bug where only 1 upload at a time is dequeued
@@ -312,7 +314,10 @@ class HappyPaste extends Plugin {
       "clipboardInput",
       (evt, data) => {
         // Ignore a new paste while the balloon is already open
-        if (this._balloon.hasView(this._balloonView)) return;
+        if (this._balloon.hasView(this._balloonView)) {
+          evt.stop();
+          return;
+        }
 
         const dataTransfer = data.dataTransfer;
         const html = dataTransfer.getData("text/html");
