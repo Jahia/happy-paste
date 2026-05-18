@@ -154,8 +154,8 @@ class HPBalloonContentsView extends View {
     pickerButton.on("execute", () => {
       this.pickerOpen = true;
       CE_API.openPicker({
-        site: contextJsParameters.siteKey,
-        lang: contextJsParameters.lang,
+        site: window.contextJsParameters.siteKey,
+        lang: window.contextJsParameters.lang,
         type: "folder",
         setValue: async ([{ path }]: Array<{ path: string }>) => {
           this.pickerOpen = false;
@@ -269,7 +269,7 @@ class HappyPaste extends Plugin {
             .replaceAll(
               /￼_\d+_/g,
               (match) =>
-                `/files/{workspace}${path}/${encodeURIComponent(files.get(match)?.name ?? "")}`,
+                `${window.contextJsParameters.contextPath}/files/{workspace}${path}/${encodeURIComponent(files.get(match)?.name ?? "")}`,
             ),
         );
 
