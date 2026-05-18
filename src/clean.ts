@@ -21,6 +21,8 @@ const Attr = {
   IMPLICIT_BOLD: 1 << i++,
   /** Node that can contain another document themselves (e.g. <li>) */
   ROOT: 1 << i++,
+  /** Node that should be skipped (e.g. <style>) */
+  SKIP: 1 << i++,
 };
 
 /** All known nodes with their attributes */
@@ -41,7 +43,9 @@ const KnownNodes: Record<string, number> = {
   p: Attr.STRUCTURE,
   pre: Attr.STRUCTURE | Attr.PRE,
   s: Attr.INLINE,
+  script: Attr.SKIP,
   strong: Attr.INLINE,
+  style: Attr.SKIP,
   table: Attr.STRUCTURE,
   tbody: Attr.TABLE,
   td: Attr.TABLE | Attr.ROOT,
@@ -358,6 +362,9 @@ function visitElement(
       childContext,
     );
 
+  // Skip <script> and <style>
+  if (checkAttr(node, Attr.SKIP)) return;
+
   // Google docs creates invalid nested lists (e.g. <ul><ul><li>), fix them
   if (node.tagName === "ul" || node.tagName === "ol") {
     const children = visitChildren();
@@ -417,7 +424,6 @@ function visitElement(
     if (typeof src === "string" && src.startsWith("data:")) {
       const type = src.substring(5, src.indexOf(";"));
       const name = `￼_${context.files.length}_`;
-      // @ts-expect-error Baseline 2025 Newly available
       const buffer = Uint8Array.fromBase64(src.slice(src.indexOf("base64,") + 7));
       context.files.push(new File([buffer], name, { type }));
       return {

@@ -158,6 +158,19 @@ suite("basic tests", () => {
       }
     `);
   });
+
+  test("remove styles", () => {
+    expect(
+      process(
+        `<style>p { color: red; }</style><p style="color: red;" onclick="alert(1)">This is a paragraph with style.</p><script>console.log("Hello world!");</script>`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "files": [],
+        "html": "<p>This is a paragraph with style.</p>",
+      }
+    `);
+  });
 });
 
 suite("google docs", () => {
