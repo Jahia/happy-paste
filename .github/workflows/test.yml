@@ -1,6 +1,6 @@
-name: Build
+name: Build and Test
 
-on: push
+on: pull_request
 
 jobs:
   build:
@@ -8,12 +8,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       - run: yarn && yarn build && yarn test
       - run: |
           echo name=$(yarn node -p process.env.npm_package_name) >> $GITHUB_ENV
           echo version=$(yarn node -p process.env.npm_package_version) >> $GITHUB_ENV
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           path: dist/package.tgz
           name: ${{ env.name }}-${{ env.version }}.tgz
+          archive: false

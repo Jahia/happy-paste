@@ -54,6 +54,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@chachalog/types@npm:^0.5.1":
+  version: 0.5.1
+  resolution: "@chachalog/types@npm:0.5.1"
+  checksum: 10c0/6d36e96f15da5987591d27e4789c2f5daaa4790abe02dc67242c8c648422bcf9906a9f905fc6182783a7fdfe1c21c790bd70a97ce31a8c77f5299dabe6104243
+  languageName: node
+  linkType: hard
+
 "@ckeditor/ckeditor5-adapter-ckfinder@npm:45.2.2":
   version: 45.2.2
   resolution: "@ckeditor/ckeditor5-adapter-ckfinder@npm:45.2.2"
@@ -2370,6 +2377,7 @@ __metadata:
   resolution: "happy-paste@workspace:."
   dependencies:
     "@babel/runtime": "npm:^7.29.2"
+    "@chachalog/types": "npm:^0.5.1"
     "@jahia/ui-extender": "npm:^1.3.0"
     "@jahia/vite-federation-plugin": "npm:^0.1.2"
     "@types/node": "npm:^25.9.1"

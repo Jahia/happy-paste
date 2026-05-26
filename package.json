@@ -1,6 +1,6 @@
 {
   "name": "happy-paste",
-  "version": "0.1.0-SNAPSHOT",
+  "version": "0.1.0",
   "private": true,
   "files": [
     "javascript",
@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@babel/runtime": "^7.29.2",
+    "@chachalog/types": "^0.5.1",
     "@jahia/vite-federation-plugin": "^0.1.2",
     "@types/node": "^25.9.1",
     "@types/react": "^18.3.29",
@@ -38,6 +39,5 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
     "vitest": "^4.1.7"
-  },
-  "packageManager": "yarn@4.12.0"
+  }
 }
