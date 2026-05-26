@@ -1,13 +1,9 @@
 {
   "name": "happy-paste",
   "version": "0.1.0",
-  "files": [
-    "javascript",
-    "settings"
-  ],
   "type": "module",
   "scripts": {
-    "build": "vite build && yarn pack --out dist/package.tgz",
+    "build": "vite build && node scripts/make-jar.mjs",
     "dev": "vite build --watch",
     "test": "vitest"
   },

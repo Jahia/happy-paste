@@ -15,6 +15,5 @@ jobs:
           echo version=$(yarn node -p process.env.npm_package_version) >> $GITHUB_ENV
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/package.tgz
-          name: ${{ env.name }}-${{ env.version }}.tgz
+          path: dist/${{ env.name }}-${{ env.version }}.jar
           archive: false

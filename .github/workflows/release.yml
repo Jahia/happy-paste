@@ -31,8 +31,7 @@ jobs:
           echo version=$(yarn node -p process.env.npm_package_version) >> $GITHUB_ENV
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/package.tgz
-          name: ${{ env.name }}-${{ env.version }}.tgz
+          path: dist/${{ env.name }}-${{ env.version }}.jar
           archive: false
       - run: npx chachalog@^0.5.0 publish-release
         env:
@@ -40,6 +39,6 @@ jobs:
       - name: Attach build artifact to release
         run: |
           tag=${{ env.name }}@${{ env.version }}
-          gh release upload $tag dist/package.tgz#${{ env.name }}-${{ env.version }}.tgz || true
+          gh release upload $tag dist/${{ env.name }}-${{ env.version }}.jar || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
