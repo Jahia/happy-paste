@@ -1,0 +1,45 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: null
+
+jobs:
+  prepare-next-release:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - run: npx chachalog@^0.5.0 prepare-next-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+      - run: yarn install && yarn build && yarn test
+      - run: |
+          echo name=$(yarn node -p process.env.npm_package_name) >> $GITHUB_ENV
+          echo version=$(yarn node -p process.env.npm_package_version) >> $GITHUB_ENV
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/package.tgz
+          name: ${{ env.name }}-${{ env.version }}.tgz
+          archive: false
+      - run: npx chachalog@^0.5.0 publish-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Attach build artifact to release
+        run: |
+          tag=${{ env.name }}@${{ env.version }}
+          gh release upload $tag dist/package.tgz#${{ env.name }}-${{ env.version }}.tgz || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

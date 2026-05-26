@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@babel/runtime": "^7.29.2",
+    "@chachalog/types": "^0.5.1",
     "@jahia/vite-federation-plugin": "^0.1.2",
     "@types/node": "^25.9.1",
     "@types/react": "^18.3.29",
