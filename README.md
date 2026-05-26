@@ -13,4 +13,4 @@ This package is currently under development and not yet published to the Jahia s
 
 - Go to the [list of Build runs](https://github.com/Jahia/happy-paste/actions?query=is%3Asuccess+branch%3Amain)
 - Pick the latest successful build
-- Download the `happy-paste-<version>.tgz` artifact
+- Download the `happy-paste-<version>.jar` artifact
