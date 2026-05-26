@@ -12,6 +12,7 @@ export default defineConfig({
       exposes: {
         "./init": "./src/index.ts",
       },
+      dts: false,
     }),
     {
       name: "watch-mode",
