@@ -1,7 +1,6 @@
 {
   "name": "happy-paste",
   "version": "0.1.0",
-  "private": true,
   "files": [
     "javascript",
     "settings"
