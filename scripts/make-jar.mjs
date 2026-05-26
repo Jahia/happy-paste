@@ -17,6 +17,25 @@ writeFileSync(
   `version=${pkg.version}\ngroupId=${GROUP_ID}\nartifactId=${pkg.name}\n`,
 );
 
+// pom.xml — required by Nexus when the Jahia Store re-publishes the artifact
+writeFileSync(
+  `${STAGING}/META-INF/maven/${GROUP_ID}/${pkg.name}/pom.xml`,
+  `<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>${GROUP_ID}</groupId>
+  <artifactId>${pkg.name}</artifactId>
+  <version>${pkg.version}</version>
+  <packaging>bundle</packaging>
+  <parent>
+    <artifactId>jahia-modules</artifactId>
+    <groupId>org.jahia.modules</groupId>
+    <version>8.2.3.0</version>
+  </parent>
+</project>
+`,
+);
+
 // Copy module content
 cpSync("javascript", `${STAGING}/javascript`, { recursive: true });
 
@@ -24,14 +43,20 @@ cpSync("javascript", `${STAGING}/javascript`, { recursive: true });
 writeFileSync(
   "dist/MANIFEST.MF",
   `Manifest-Version: 1.0
+Bundle-Category: jahia-module
+Bundle-Description: ${pkg.description}
 Bundle-ManifestVersion: 2
 Bundle-Name: ${pkg.name}
 Bundle-SymbolicName: ${pkg.name}
 Bundle-Version: ${pkg.version.replace(/^(\d+\.\d+\.\d+)-(.+)$/, "$1.$2")}
+Implementation-Title: ${pkg.name}
+Implementation-URL: http://github.com/Jahia/happy-paste
+Implementation-Version: ${pkg.version}
 Jahia-Module-Type: system
 Jahia-Required-Version: 8.2.3.0
 Jahia-GroupId: ${GROUP_ID}
 Jahia-Depends: richtext-ckeditor5
+Jahia-Source-Control-Connection: http://github.com/Jahia/happy-paste
 Jahia-Static-Resources: /javascript
 `,
 );
