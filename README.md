@@ -9,7 +9,9 @@ A Jahia module to paste content happily in rich texts:
 
 ## Installation
 
-This package is currently under development and not yet published to the Jahia store. You can download snapshots built from the `main` branch:
+[The module is available on Jahia Store!](https://store.jahia.com/contents/modules-repository/org/jahia/community/happy-paste.html)
+
+You can also download snapshots built from the `main` branch:
 
 - Go to the [list of Build runs](https://github.com/Jahia/happy-paste/actions?query=is%3Asuccess+branch%3Amain)
 - Pick the latest successful build
