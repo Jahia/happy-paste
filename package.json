@@ -35,6 +35,6 @@
     "vitest": "^4.1.9"
   },
   "resolutions": {
-    "@module-federation/vite": "https://pkg.pr.new/@module-federation/vite@875"
+    "@module-federation/vite": "https://pkg.pr.new/@module-federation/vite@879"
   }
 }

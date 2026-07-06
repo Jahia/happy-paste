@@ -960,12 +960,12 @@ __metadata:
 
 "@jahia/vite-federation-plugin@file:./vite-federation-plugin.tgz::locator=happy-paste%40workspace%3A.":
   version: 0.1.2
-  resolution: "@jahia/vite-federation-plugin@file:./vite-federation-plugin.tgz#./vite-federation-plugin.tgz::hash=71fcd7&locator=happy-paste%40workspace%3A."
+  resolution: "@jahia/vite-federation-plugin@file:./vite-federation-plugin.tgz#./vite-federation-plugin.tgz::hash=4a86f9&locator=happy-paste%40workspace%3A."
   dependencies:
     "@module-federation/vite": "npm:^1.16.12"
   peerDependencies:
     vite: ^7.0.0 || ^8.0.0
-  checksum: 10c0/b334d4799e9dba736f8b45f637dbc28cc2ca0f25d2718cc323f245e21569c710c7f3c7b0f245c55151cbf688172776178117a11829dd32324d75830664f71bc2
+  checksum: 10c0/18974463cc7d56a160e5edd930a91502f5dad3c1d7cfdf190b974791d18621ef659fc30e034cdb4f4e17c43eafeb8c77d180aa7766021d3d661a204fbcddcd17
   languageName: node
   linkType: hard
 
@@ -1084,16 +1084,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@module-federation/vite@https://pkg.pr.new/@module-federation/vite@875":
+"@module-federation/vite@https://pkg.pr.new/@module-federation/vite@879":
   version: 1.16.12
-  resolution: "@module-federation/vite@https://pkg.pr.new/@module-federation/vite@875"
+  resolution: "@module-federation/vite@https://pkg.pr.new/@module-federation/vite@879"
   dependencies:
     "@module-federation/dts-plugin": "npm:2.6.0"
     "@module-federation/runtime": "npm:2.6.0"
     "@module-federation/sdk": "npm:2.6.0"
   peerDependencies:
     vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
-  checksum: 10c0/d798038ebf6e00c6c9d4cd4c3a0bbfd617e36283349822b7a51ef5ac3e44920be50586180828cb9da5d0e0f0425dd2116109dff23e27dbe971eeef9739cdd004
+  checksum: 10c0/94f4e2f0823ff3428f1a56d63b9db9d521b108ee27164e7aaeaf4716c319ce6e08e61515535cdb5607d0cd25e85a5b0d9295ae4887d3fea6b8b852885c7ecd89
   languageName: node
   linkType: hard
 
