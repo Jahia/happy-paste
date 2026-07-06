@@ -55,7 +55,7 @@ Implementation-Version: ${pkg.version}
 Jahia-Module-Type: system
 Jahia-Required-Version: 8.2.3.0
 Jahia-GroupId: ${GROUP_ID}
-Jahia-Depends: richtext-ckeditor5
+Jahia-Depends: richtext-ckeditor5=1.0.1
 Jahia-Source-Control-Connection: http://github.com/Jahia/happy-paste
 Jahia-Static-Resources: /javascript
 `,
