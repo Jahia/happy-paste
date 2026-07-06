@@ -2,5 +2,8 @@
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.formatOnSave": true,
   "oxc.enable": true,
-  "oxc.typeAware": true
+  "oxc.typeAware": true,
+  "[javascript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  }
 }

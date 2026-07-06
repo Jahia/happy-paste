@@ -4,7 +4,7 @@ import {
   Plugin,
   type ViewDocumentClipboardInputEvent,
   type EditorConfig,
-  ContextualBalloon,
+  type ContextualBalloon,
   BalloonPanelView,
   Locale,
   View,
@@ -228,11 +228,11 @@ class HappyPaste extends Plugin {
   _happyPasteCallback: (() => void) | null = null;
 
   static get requires() {
-    return [ContextualBalloon];
+    return ["ContextualBalloon"];
   }
 
   init() {
-    this._balloon = this.editor.plugins.get(ContextualBalloon);
+    this._balloon = this.editor.plugins.get("ContextualBalloon");
     this._balloonView = new BalloonPanelView(this.editor.locale);
     const balloonContents = new HPBalloonContentsView(this.editor.locale);
 
