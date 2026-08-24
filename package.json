@@ -1,6 +1,6 @@
 {
   "name": "happy-paste",
-  "version": "0.1.2",
+  "version": "0.1.3-SNAPSHOT",
   "description": "Automatically remove formatting while preserving basic structure when pasting from Microsoft Word, Google Docs and similar rich text editors.",
   "type": "module",
   "scripts": {
@@ -8,33 +8,31 @@
     "dev": "vite build --watch",
     "test": "vitest"
   },
-  "dependencies": {
-    "@jahia/ui-extender": "^2.0.0",
-    "i18next": "^26.3.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "redux": "^5.0.1",
-    "redux-batched-actions": "^0.5.0"
-  },
   "devDependencies": {
-    "@chachalog/types": "^0.5.2",
-    "@jahia/vite-federation-plugin": "./vite-federation-plugin.tgz",
-    "@types/node": "^25.9.4",
+    "@chachalog/types": "^0.5.4",
+    "@jahia/ui-extender": "^2.0.0",
+    "@jahia/vite-federation-plugin": "https://pkg.pr.new/Jahia/javascript-components/@jahia/vite-federation-plugin@397.tgz",
+    "@types/node": "^25.9.5",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
-    "@typescript/native-preview": "^7.0.0-dev.20260701.1",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.11",
     "ckeditor5": "^45.2.2",
     "hast-util-from-html-isomorphic": "^2.0.0",
     "hast-util-to-html": "^9.0.5",
-    "oxfmt": "^0.57.0",
-    "oxlint": "^1.72.0",
-    "oxlint-tsgolint": "^0.24.0",
-    "typescript": "^6.0.3",
-    "vite": "^8.1.3",
-    "vitest": "^4.1.9"
+    "i18next": "^26.4.0",
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "redux": "^5.0.1",
+    "redux-batched-actions": "^0.5.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
-  "resolutions": {
-    "@module-federation/vite": "https://pkg.pr.new/@module-federation/vite@879"
+  "peerDependencies": {
+    "@jahia/ui-extender": "^2.0.0",
+    "i18next": ">=23",
+    "react": "^18.3.1",
+    "redux": "^5.0.1"
   }
 }
